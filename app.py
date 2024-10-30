@@ -24,7 +24,7 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 
 # Configure Gemini AI
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-model = genai.GenerativeModel('gemini-pro')
+app.config['GENAI_MODEL'] = genai.GenerativeModel('gemini-pro')
 
 # Initialize extensions
 db.init_app(app)
@@ -37,11 +37,13 @@ with app.app_context():
     from curriculum import curriculum_bp
     from quiz import quiz_bp
     from dashboard import dashboard_bp
+    from google_auth import google_auth
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(curriculum_bp)
     app.register_blueprint(quiz_bp)
     app.register_blueprint(dashboard_bp)
+    app.register_blueprint(google_auth, url_prefix='/')
     
     # Import models and create tables
     import models

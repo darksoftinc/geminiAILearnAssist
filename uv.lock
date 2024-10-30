@@ -776,6 +776,8 @@ dependencies = [
     { name = "openai" },
     { name = "psycopg2-binary" },
     { name = "requests" },
+    { name = "sqlalchemy" },
+    { name = "werkzeug" },
 ]
 
 [package.metadata]
@@ -789,6 +791,8 @@ requires-dist = [
     { name = "openai", specifier = ">=1.52.2" },
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "requests", specifier = ">=2.32.3" },
+    { name = "sqlalchemy", specifier = ">=2.0.36" },
+    { name = "werkzeug", specifier = ">=3.0.6" },
 ]
 
 [[package]]
