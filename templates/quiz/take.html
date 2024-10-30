@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Quiz: {{ quiz.title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="card-title mb-4">{{ quiz.title }}</h2>
+                    <form method="POST" id="quizForm">
+                        {% for question in quiz.questions %}
+                            <div class="mb-4">
+                                <h5 class="mb-3">{{ loop.index }}. {{ question.question_text }}</h5>
+                                <div class="list-group">
+                                    {% for option in question.options %}
+                                        <label class="list-group-item">
+                                            <input type="radio" 
+                                                   name="question_{{ question.id }}" 
+                                                   value="{{ option }}"
+                                                   class="form-check-input me-2"
+                                                   required>
+                                            {{ option }}
+                                        </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                        
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">
+                                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                                Quizi Tamamla
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('quizForm').addEventListener('submit', function(e) {
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const spinner = submitBtn.querySelector('.spinner-border');
+    
+    // Show loading state
+    submitBtn.disabled = true;
+    spinner.classList.remove('d-none');
+    submitBtn.textContent = ' Yanıtlar Gönderiliyor...';
+    submitBtn.prepend(spinner);
+});
+</script>
+{% endblock %}

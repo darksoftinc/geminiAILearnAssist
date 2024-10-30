@@ -11,6 +11,15 @@
                     <h2 class="card-title mb-4">Yeni Quiz Oluştur</h2>
                     <form method="POST" id="createQuizForm">
                         <div class="mb-3">
+                            <label for="curriculum_id" class="form-label">Müfredat Seçin</label>
+                            <select class="form-select" id="curriculum_id" name="curriculum_id" required>
+                                <option value="" selected disabled>Müfredat seçin</option>
+                                {% for curriculum in curricula %}
+                                    <option value="{{ curriculum.id }}">{{ curriculum.title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
                             <label for="title" class="form-label">Quiz Başlığı</label>
                             <input type="text" class="form-control" id="title" name="title" 
                                    required maxlength="200" pattern=".{3,}" 

@@ -7,35 +7,39 @@ from ai_service import generate_quiz_questions, AIServiceError
 
 quiz_bp = Blueprint('quiz', __name__)
 
-@quiz_bp.route('/quiz/create/<int:curriculum_id>', methods=['GET', 'POST'])
+@quiz_bp.route('/quiz/create', methods=['GET', 'POST'])
 @login_required
-def create(curriculum_id):
+def create():
     if not current_user.is_teacher:
         flash('Bu işlemi sadece öğretmenler yapabilir.', 'error')
         return redirect(url_for('dashboard.index'))
     
-    # Verify curriculum exists and belongs to teacher
-    curriculum = Curriculum.query.get_or_404(curriculum_id)
-    if curriculum.author_id != current_user.id:
-        flash('Sadece kendi müfredatınız için quiz oluşturabilirsiniz.', 'error')
-        return redirect(url_for('curriculum.view', id=curriculum_id))
+    # Get curricula created by the current teacher
+    curricula = Curriculum.query.filter_by(author_id=current_user.id).all()
     
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
+        curriculum_id = request.form.get('curriculum_id')
         try:
             num_questions = int(request.form.get('num_questions', '5'))
         except ValueError:
             flash('Geçersiz soru sayısı seçildi.', 'error')
-            return render_template('quiz/create.html', curriculum_id=curriculum_id)
+            return render_template('quiz/create.html', curricula=curricula)
         
         # Validate inputs
-        if not title:
-            flash('Quiz başlığı gereklidir.', 'error')
-            return render_template('quiz/create.html', curriculum_id=curriculum_id)
+        if not title or not curriculum_id:
+            flash('Quiz başlığı ve müfredat seçimi zorunludur.', 'error')
+            return render_template('quiz/create.html', curricula=curricula)
             
         if num_questions not in [5, 10, 15, 20]:
             flash('Geçersiz soru sayısı seçildi.', 'error')
-            return render_template('quiz/create.html', curriculum_id=curriculum_id)
+            return render_template('quiz/create.html', curricula=curricula)
+        
+        # Verify curriculum exists and belongs to teacher
+        curriculum = Curriculum.query.get_or_404(curriculum_id)
+        if curriculum.author_id != current_user.id:
+            flash('Sadece kendi müfredatınız için quiz oluşturabilirsiniz.', 'error')
+            return render_template('quiz/create.html', curricula=curricula)
         
         try:
             # Generate questions using AI
@@ -68,15 +72,15 @@ def create(curriculum_id):
         except AIServiceError as e:
             current_app.logger.error(f"AI Servisi Hatası: {str(e)}")
             flash(f'Quiz oluşturulurken hata: {str(e)}', 'error')
-            return render_template('quiz/create.html', curriculum_id=curriculum_id)
+            return render_template('quiz/create.html', curricula=curricula)
             
         except Exception as e:
             current_app.logger.error(f"Quiz oluşturma hatası: {str(e)}")
             db.session.rollback()
             flash('Quiz oluşturulurken beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.', 'error')
-            return render_template('quiz/create.html', curriculum_id=curriculum_id)
+            return render_template('quiz/create.html', curricula=curricula)
     
-    return render_template('quiz/create.html', curriculum_id=curriculum_id)
+    return render_template('quiz/create.html', curricula=curricula)
 
 @quiz_bp.route('/quiz/<int:id>/take', methods=['GET', 'POST'])
 @login_required
@@ -102,6 +106,7 @@ def take(id):
         db.session.add(attempt)
         db.session.commit()
         
+        flash(f'Quiz tamamlandı! Puanınız: {final_score:.1f}%', 'success')
         return redirect(url_for('quiz.results', attempt_id=attempt.id))
     
     return render_template('quiz/take.html', quiz=quiz)
