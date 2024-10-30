@@ -1,4 +1,6 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+import json
+import logging
+from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from flask_login import login_required, current_user
 from models import Quiz, Question, QuizAttempt, Curriculum, db
 from ai_service import generate_quiz_questions, AIServiceError
@@ -12,8 +14,11 @@ def create(curriculum_id):
         flash('Bu işlemi sadece öğretmenler yapabilir.', 'error')
         return redirect(url_for('dashboard.index'))
     
-    # Verify curriculum exists
+    # Verify curriculum exists and belongs to teacher
     curriculum = Curriculum.query.get_or_404(curriculum_id)
+    if curriculum.author_id != current_user.id:
+        flash('Sadece kendi müfredatınız için quiz oluşturabilirsiniz.', 'error')
+        return redirect(url_for('curriculum.view', id=curriculum_id))
     
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
@@ -33,6 +38,11 @@ def create(curriculum_id):
             return render_template('quiz/create.html', curriculum_id=curriculum_id)
         
         try:
+            # Generate questions using AI
+            current_app.logger.info(f"Quiz oluşturuluyor: {title}, Soru sayısı: {num_questions}")
+            questions_data = generate_quiz_questions(curriculum.content, num_questions)
+            
+            # Create quiz
             quiz = Quiz(
                 title=title,
                 curriculum_id=curriculum_id
@@ -40,26 +50,28 @@ def create(curriculum_id):
             db.session.add(quiz)
             db.session.flush()  # Get the quiz ID without committing
             
-            # Generate questions using AI
-            questions_data = generate_quiz_questions(curriculum.content, num_questions)
-            
+            # Add questions
             for q_data in questions_data:
                 question = Question(
                     quiz_id=quiz.id,
                     question_text=q_data['question'],
-                    correct_answer=q_data['correct_answer'],
-                    options=q_data['options']
+                    options=q_data['options'],
+                    correct_answer=q_data['correct_answer']
                 )
                 db.session.add(question)
             
             db.session.commit()
+            current_app.logger.info(f"Quiz başarıyla oluşturuldu: ID={quiz.id}")
             flash('Quiz başarıyla oluşturuldu!', 'success')
             return redirect(url_for('curriculum.view', id=curriculum_id))
             
         except AIServiceError as e:
-            flash(f'Quiz soruları oluşturulurken hata oluştu: {str(e)}', 'error')
+            current_app.logger.error(f"AI Servisi Hatası: {str(e)}")
+            flash(f'Quiz oluşturulurken hata: {str(e)}', 'error')
             return render_template('quiz/create.html', curriculum_id=curriculum_id)
+            
         except Exception as e:
+            current_app.logger.error(f"Quiz oluşturma hatası: {str(e)}")
             db.session.rollback()
             flash('Quiz oluşturulurken beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.', 'error')
             return render_template('quiz/create.html', curriculum_id=curriculum_id)
