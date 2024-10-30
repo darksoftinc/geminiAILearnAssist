@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <h2>Welcome to your learning dashboard</h2>
+        
+        {% if current_user.is_teacher %}
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Teacher Dashboard</h5>
+                    <p class="card-text">Manage your curricula and quizzes</p>
+                    <a href="{{ url_for('curriculum.create') }}" class="btn btn-primary">Create New Curriculum</a>
+                </div>
+            </div>
+        {% endif %}
+        
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Your Progress</h5>
+                <canvas id="progressChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Recent Quizzes</h5>
+                <div class="list-group">
+                    {% for attempt in current_user.quiz_attempts[-5:] %}
+                        <div class="list-group-item">
+                            <h6>{{ attempt.quiz.title }}</h6>
+                            <p>Score: {{ "%.2f"|format(attempt.score) }}%</p>
+                            <small class="text-muted">Completed: {{ attempt.completed_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Available Curricula</h5>
+                <div class="list-group">
+                    {% for curriculum in curricula %}
+                        <a href="{{ url_for('curriculum.view', id=curriculum.id) }}" class="list-group-item list-group-item-action">
+                            {{ curriculum.title }}
+                        </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('progressChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ dates|tojson }},
+            datasets: [{
+                label: 'Quiz Scores',
+                data: {{ scores|tojson }},
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
