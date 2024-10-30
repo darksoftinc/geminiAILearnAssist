@@ -43,12 +43,14 @@ with app.app_context():
     from dashboard import dashboard_bp
     from google_auth import google_auth
     from analytics import analytics_bp
+    from student import student_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(curriculum_bp)
     app.register_blueprint(quiz_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(analytics_bp)
+    app.register_blueprint(student_bp)
     app.register_blueprint(google_auth, url_prefix='/')
     
     # Import models and create tables

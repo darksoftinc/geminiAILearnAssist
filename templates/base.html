@@ -41,7 +41,17 @@
                                     <i class="bi bi-plus-circle me-1"></i>Müfredat Oluştur
                                 </a>
                             </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('student.create') }}">
+                                    <i class="bi bi-person-plus me-1"></i>Öğrenci Ekle
+                                </a>
+                            </li>
                         {% endif %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('student.list') }}">
+                                <i class="bi bi-people me-1"></i>Öğrencilerim
+                            </a>
+                        </li>
                     {% endif %}
                 </ul>
                 <ul class="navbar-nav">

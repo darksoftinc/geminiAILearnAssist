@@ -13,6 +13,18 @@ class User(UserMixin, db.Model):
     # Relationships
     curricula = db.relationship('Curriculum', backref='author', lazy=True)
     quiz_attempts = db.relationship('QuizAttempt', backref='student', lazy=True)
+    students = db.relationship('Student', backref='teacher', lazy=True)
+
+class Student(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    grade = db.Column(db.String(20), nullable=False)  # class/grade
+    teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    quiz_attempts = db.relationship('QuizAttempt', backref='student_profile', lazy=True)
 
 class Curriculum(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -46,5 +58,6 @@ class QuizAttempt(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     quiz_id = db.Column(db.Integer, db.ForeignKey('quiz.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('student.id'), nullable=True)
     score = db.Column(db.Float)
     completed_at = db.Column(db.DateTime, default=datetime.utcnow)

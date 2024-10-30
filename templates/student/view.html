@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}{{ student.name }} - Performans{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <h2>{{ student.name }} - Öğrenci Performansı</h2>
+            <p class="text-muted">
+                <i class="bi bi-envelope me-1"></i>{{ student.email }} |
+                <i class="bi bi-mortarboard me-1"></i>{{ student.grade }}. Sınıf
+            </p>
+        </div>
+    </div>
+
+    <!-- Performance Overview Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Toplam Quiz</h5>
+                    <h2 class="card-text">{{ performance_data.total_attempts }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Ortalama Puan</h5>
+                    <h2 class="card-text">{{ "%.1f"|format(performance_data.average_score) }}%</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">En Yüksek Puan</h5>
+                    <h2 class="card-text">{{ "%.1f"|format(performance_data.highest_score) }}%</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">En Düşük Puan</h5>
+                    <h2 class="card-text">{{ "%.1f"|format(performance_data.lowest_score) }}%</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Performance Chart -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Quiz Performans Grafiği</h5>
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Quiz Attempts -->
+    <div class="row">
+        <div class="col">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Quiz Geçmişi</h5>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Quiz</th>
+                                    <th>Puan</th>
+                                    <th>Tarih</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for attempt in quiz_attempts %}
+                                <tr>
+                                    <td>{{ attempt.quiz.title }}</td>
+                                    <td>{{ "%.1f"|format(attempt.score) }}%</td>
+                                    <td>{{ attempt.completed_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('performanceChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ quiz_attempts|map(attribute='completed_at.strftime', args=['%Y-%m-%d'])|list|tojson }},
+            datasets: [{
+                label: 'Quiz Puanları',
+                data: {{ quiz_attempts|map(attribute='score')|list|tojson }},
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

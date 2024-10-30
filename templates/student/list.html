@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Öğrencilerim{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <h2>Öğrencilerim</h2>
+            {% if current_user.is_teacher %}
+            <a href="{{ url_for('student.create') }}" class="btn btn-primary">
+                <i class="bi bi-person-plus me-1"></i>Yeni Öğrenci Ekle
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row">
+        {% for student in students %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">{{ student.name }}</h5>
+                    <p class="card-text">
+                        <small class="text-muted">
+                            <i class="bi bi-envelope me-1"></i>{{ student.email }}
+                        </small>
+                    </p>
+                    <p class="card-text">
+                        <i class="bi bi-mortarboard me-1"></i>{{ student.grade }}. Sınıf
+                    </p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <a href="{{ url_for('student.view', id=student.id) }}" class="btn btn-primary">
+                            <i class="bi bi-graph-up me-1"></i>Performans
+                        </a>
+                        <small class="text-muted">Kayıt: {{ student.created_at.strftime('%Y-%m-%d') }}</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
