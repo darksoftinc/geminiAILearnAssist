@@ -1,32 +1,32 @@
 {% extends "base.html" %}
 
-{% block title %}Login{% endblock %}
+{% block title %}Giriş Yap{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-6 col-lg-4">
         <div class="card">
             <div class="card-body">
-                <h2 class="card-title text-center mb-4">Login</h2>
+                <h2 class="card-title text-center mb-4">Giriş Yap</h2>
                 <form method="POST">
                     <div class="mb-3">
-                        <label for="email" class="form-label">Email</label>
+                        <label for="email" class="form-label">E-posta</label>
                         <input type="email" class="form-control" id="email" name="email" required>
                     </div>
                     <div class="mb-3">
-                        <label for="password" class="form-label">Password</label>
+                        <label for="password" class="form-label">Parola</label>
                         <input type="password" class="form-control" id="password" name="password" required>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100 mb-3">Login</button>
+                    <button type="submit" class="btn btn-primary w-100 mb-3">Giriş Yap</button>
                 </form>
                 <div class="text-center">
-                    <p class="mb-2">Or login with:</p>
+                    <p class="mb-2">Veya şununla giriş yap:</p>
                     <a href="{{ url_for('auth.google_auth.login') }}" class="btn btn-outline-primary w-100">
                         <img src="https://www.google.com/favicon.ico" alt="Google" style="height: 20px; margin-right: 8px;">
-                        Login with Google
+                        Google ile Giriş Yap
                     </a>
                     <hr>
-                    <p class="mb-0">Don't have an account? <a href="{{ url_for('auth.register') }}">Register here</a></p>
+                    <p class="mb-0">Hesabınız yok mu? <a href="{{ url_for('auth.register') }}">Buradan kayıt olun</a></p>
                 </div>
             </div>
         </div>

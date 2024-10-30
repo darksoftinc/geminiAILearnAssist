@@ -10,7 +10,7 @@ def teacher_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not current_user.is_teacher:
-            flash('Access denied. Only teachers can perform this action.', 'error')
+            flash('Erişim reddedildi. Bu işlemi sadece öğretmenler yapabilir.', 'error')
             return redirect(url_for('dashboard.index'))
         return f(*args, **kwargs)
     return decorated_function
@@ -26,7 +26,7 @@ def create():
         
         # Form validation
         if not title or not topic or not level:
-            flash('All fields are required.', 'error')
+            flash('Tüm alanların doldurulması zorunludur.', 'error')
             return render_template('curriculum/create.html', 
                                 form_data={'title': title, 'topic': topic, 'level': level})
         
@@ -43,7 +43,7 @@ def create():
             db.session.add(curriculum)
             db.session.commit()
             
-            flash('Curriculum created successfully!', 'success')
+            flash('Müfredat başarıyla oluşturuldu!', 'success')
             return redirect(url_for('curriculum.view', id=curriculum.id))
             
         except AIServiceError as e:
@@ -51,7 +51,7 @@ def create():
             return render_template('curriculum/create.html', 
                                 form_data={'title': title, 'topic': topic, 'level': level})
         except Exception as e:
-            flash('An unexpected error occurred. Please try again.', 'error')
+            flash('Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.', 'error')
             return render_template('curriculum/create.html', 
                                 form_data={'title': title, 'topic': topic, 'level': level})
     
@@ -76,7 +76,7 @@ def edit(id):
     curriculum = Curriculum.query.get_or_404(id)
     
     if curriculum.author_id != current_user.id:
-        flash('You can only edit your own curricula', 'error')
+        flash('Sadece kendi müfredatınızı düzenleyebilirsiniz', 'error')
         return redirect(url_for('curriculum.list'))
     
     if request.method == 'POST':
@@ -84,17 +84,17 @@ def edit(id):
         content = request.form.get('content', '').strip()
         
         if not title or not content:
-            flash('All fields are required.', 'error')
+            flash('Tüm alanların doldurulması zorunludur.', 'error')
             return render_template('curriculum/edit.html', curriculum=curriculum)
             
         try:
             curriculum.title = title
             curriculum.content = content
             db.session.commit()
-            flash('Curriculum updated successfully!', 'success')
+            flash('Müfredat başarıyla güncellendi!', 'success')
             return redirect(url_for('curriculum.view', id=curriculum.id))
         except Exception as e:
-            flash('An error occurred while updating the curriculum.', 'error')
+            flash('Müfredat güncellenirken bir hata oluştu.', 'error')
             return render_template('curriculum/edit.html', curriculum=curriculum)
     
     return render_template('curriculum/edit.html', curriculum=curriculum)

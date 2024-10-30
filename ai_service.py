@@ -10,49 +10,53 @@ class AIServiceError(Exception):
 def generate_curriculum_content(topic: str, level: str = "intermediate") -> str:
     """Generate curriculum content using Gemini AI with error handling and retries"""
     try:
-        prompt = f"""Generate a detailed curriculum for teaching {topic} at {level} level.
-        Include:
-        - Learning objectives
-        - Key concepts
-        - Practical exercises
-        - Assessment criteria
-        Format the response in markdown."""
+        prompt = f"""Lütfen aşağıdaki {level} seviyesinde {topic} konusu için detaylı bir müfredat oluşturun.
+        Şunları içermelidir:
+        - Öğrenme hedefleri
+        - Ana kavramlar
+        - Pratik alıştırmalar
+        - Değerlendirme kriterleri
+        Yanıtı markdown formatında verin.
+        
+        Not: Tüm içerik Türkçe olmalıdır."""
         
         @retry.Retry(predicate=retry.if_exception_type(Exception))
         def _generate_with_retry():
             response = current_app.config['GENAI_MODEL'].generate_content(prompt)
             if not response or not response.text:
-                raise AIServiceError("Empty response received from Gemini AI")
+                raise AIServiceError("Gemini AI'dan boş yanıt alındı")
             return response.text
             
         return _generate_with_retry()
         
     except Exception as e:
-        current_app.logger.error(f"Error generating curriculum content: {str(e)}")
-        raise AIServiceError(f"Failed to generate curriculum: {str(e)}")
+        current_app.logger.error(f"Müfredat içeriği oluşturulurken hata: {str(e)}")
+        raise AIServiceError(f"Müfredat oluşturulamadı: {str(e)}")
 
 def generate_quiz_questions(curriculum_content: str, num_questions: int = 5) -> str:
     """Generate quiz questions with error handling and retries"""
     try:
-        prompt = f"""Based on this curriculum content:
+        prompt = f"""Bu müfredat içeriğine dayanarak:
         {curriculum_content}
         
-        Generate {num_questions} multiple-choice questions. 
-        For each question, provide:
-        - The question text
-        - 4 possible answers (with one correct answer)
-        - The correct answer
-        Format as JSON."""
+        {num_questions} adet çoktan seçmeli soru oluşturun. 
+        Her soru için şunları sağlayın:
+        - Soru metni
+        - 4 olası cevap (bir doğru cevap ile)
+        - Doğru cevap
+        JSON formatında yanıt verin.
+        
+        Not: Tüm sorular ve cevaplar Türkçe olmalıdır."""
         
         @retry.Retry(predicate=retry.if_exception_type(Exception))
         def _generate_with_retry():
             response = current_app.config['GENAI_MODEL'].generate_content(prompt)
             if not response or not response.text:
-                raise AIServiceError("Empty response received from Gemini AI")
+                raise AIServiceError("Gemini AI'dan boş yanıt alındı")
             return response.text
             
         return _generate_with_retry()
         
     except Exception as e:
-        current_app.logger.error(f"Error generating quiz questions: {str(e)}")
-        raise AIServiceError(f"Failed to generate quiz questions: {str(e)}")
+        current_app.logger.error(f"Quiz soruları oluşturulurken hata: {str(e)}")
+        raise AIServiceError(f"Quiz soruları oluşturulamadı: {str(e)}")
