@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Quiz Sonuçları{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="card-title mb-4">{{ attempt.quiz.title }} - Sonuçlar</h2>
+                    <div class="alert alert-info">
+                        <h4>Toplam Puan: {{ "%.1f"|format(attempt.score) }}%</h4>
+                    </div>
+                    
+                    {% for question in attempt.quiz.questions %}
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3">{{ loop.index }}. {{ question.question_text }}</h5>
+                                <div class="list-group mb-3">
+                                    {% for option in question.options %}
+                                        {% set user_answer = request.form.get('question_' ~ question.id) %}
+                                        <div class="list-group-item 
+                                            {% if option == user_answer %}
+                                                {% if option == question.correct_answer %}
+                                                    list-group-item-success
+                                                {% else %}
+                                                    list-group-item-danger
+                                                {% endif %}
+                                            {% endif %}">
+                                            {{ option }}
+                                            {% if option == question.correct_answer %}
+                                                <span class="badge bg-success float-end">Doğru Cevap</span>
+                                            {% endif %}
+                                            {% if option == user_answer and option != question.correct_answer %}
+                                                <span class="badge bg-danger float-end">Sizin Cevabınız</span>
+                                            {% endif %}
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                                {% if request.form.get('question_' ~ question.id) != question.correct_answer %}
+                                    <div class="alert alert-warning">
+                                        <strong>Doğru Cevap:</strong> {{ question.correct_answer }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                    
+                    <div class="text-center mt-4">
+                        <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">Gösterge Paneline Dön</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
