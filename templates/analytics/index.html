@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}Performance Analytics{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2 class="mb-4">Performance Analytics</h2>
+    
+    <!-- Overview Cards -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Quizzes Taken</h5>
+                    <h2 class="card-text">{{ total_quizzes }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Average Score</h5>
+                    <h2 class="card-text">{{ "%.1f"|format(average_score) }}%</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Highest Score</h5>
+                    <h2 class="card-text">{{ "%.1f"|format(highest_score) }}%</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Performance Trends -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Performance Trends</h5>
+                    <div class="btn-group mb-3" role="group">
+                        <button type="button" class="btn btn-outline-primary active" data-period="week">Week</button>
+                        <button type="button" class="btn btn-outline-primary" data-period="month">Month</button>
+                        <button type="button" class="btn btn-outline-primary" data-period="year">Year</button>
+                    </div>
+                    <canvas id="trendsChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Curriculum Performance -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Curriculum Performance</h5>
+                    <canvas id="curriculumChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Recent Quiz Results</h5>
+                    <div class="list-group">
+                        {% for result in recent_trend %}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">{{ result.quiz }}</h6>
+                                <small>{{ result.date }}</small>
+                            </div>
+                            <p class="mb-1">Score: {{ "%.1f"|format(result.score) }}%</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not current_user.is_teacher %}
+    <!-- Peer Comparison -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Peer Comparison</h5>
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <canvas id="peerComparisonChart"></canvas>
+                        </div>
+                        <div class="col-md-6">
+                            <p>Your average score: {{ "%.1f"|format(average_score) }}%</p>
+                            <p>Peer average score: {{ "%.1f"|format(peer_average) }}%</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if current_user.is_teacher and class_performance %}
+    <!-- Class Performance (Teachers Only) -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Class Performance Overview</h5>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-subtitle mb-2 text-muted">Total Students</h6>
+                                    <p class="card-text h3">{{ class_performance.total_students }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-subtitle mb-2 text-muted">Total Quiz Attempts</h6>
+                                    <p class="card-text h3">{{ class_performance.total_attempts }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-subtitle mb-2 text-muted">Class Average</h6>
+                                    <p class="card-text h3">{{ "%.1f"|format(class_performance.class_average) }}%</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Performance Trends Chart
+    const trendsCtx = document.getElementById('trendsChart').getContext('2d');
+    const trendsChart = new Chart(trendsCtx, {
+        type: 'line',
+        data: {
+            labels: {{ recent_trend|map(attribute='date')|list|tojson }},
+            datasets: [{
+                label: 'Quiz Scores',
+                data: {{ recent_trend|map(attribute='score')|list|tojson }},
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+
+    // Curriculum Performance Chart
+    const curriculumCtx = document.getElementById('curriculumChart').getContext('2d');
+    const curriculumChart = new Chart(curriculumCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ curriculum_performance.keys()|list|tojson }},
+            datasets: [{
+                label: 'Average Score',
+                data: {{ curriculum_performance.values()|map(attribute='average')|list|tojson }},
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderColor: 'rgb(75, 192, 192)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+
+    {% if not current_user.is_teacher %}
+    // Peer Comparison Chart
+    const peerCtx = document.getElementById('peerComparisonChart').getContext('2d');
+    const peerChart = new Chart(peerCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Your Average', 'Peer Average'],
+            datasets: [{
+                data: [{{ average_score }}, {{ peer_average }}],
+                backgroundColor: [
+                    'rgba(75, 192, 192, 0.2)',
+                    'rgba(153, 102, 255, 0.2)'
+                ],
+                borderColor: [
+                    'rgb(75, 192, 192)',
+                    'rgb(153, 102, 255)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+    {% endif %}
+
+    // Handle period selection for trends
+    document.querySelectorAll('[data-period]').forEach(button => {
+        button.addEventListener('click', function() {
+            document.querySelectorAll('[data-period]').forEach(btn => btn.classList.remove('active'));
+            this.classList.add('active');
+            
+            fetch(`/analytics/performance_trends?period=${this.dataset.period}`)
+                .then(response => response.json())
+                .then(data => {
+                    const period = this.dataset.period;
+                    const periodData = data[period];
+                    
+                    trendsChart.data.labels = periodData.map(item => item.date);
+                    trendsChart.data.datasets[0].data = periodData.map(item => item.score);
+                    trendsChart.update();
+                });
+        });
+    });
+});
+</script>
+{% endblock %}

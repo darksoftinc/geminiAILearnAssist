@@ -25,6 +25,9 @@
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('curriculum.list') }}">Müfredat</a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('analytics.index') }}">Analiz</a>
+                        </li>
                         {% if current_user.is_teacher %}
                             <li class="nav-item">
                                 <a class="nav-link" href="{{ url_for('curriculum.create') }}">Müfredat Oluştur</a>
@@ -98,7 +101,6 @@
             });
 
             socket.on('notification', function(data) {
-                // Create notification element
                 const notification = document.createElement('li');
                 notification.innerHTML = `
                     <div class="dropdown-item">
@@ -110,19 +112,16 @@
                     </div>
                 `;
                 
-                // Add to notifications list
                 if (notificationsList.firstChild) {
                     notificationsList.insertBefore(notification, notificationsList.firstChild);
                 } else {
                     notificationsList.appendChild(notification);
                 }
                 
-                // Update unread count
                 unreadCount++;
                 notificationBadge.textContent = unreadCount;
                 notificationBadge.classList.remove('d-none');
                 
-                // Show toast notification
                 const toast = document.createElement('div');
                 toast.className = 'toast';
                 toast.setAttribute('role', 'alert');
@@ -140,7 +139,6 @@
                 new bootstrap.Toast(toast).show();
             });
 
-            // Reset unread count when notifications dropdown is opened
             document.getElementById('notificationsDropdown').addEventListener('click', function() {
                 unreadCount = 0;
                 notificationBadge.classList.add('d-none');
