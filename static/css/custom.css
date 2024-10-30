@@ -1,0 +1,9 @@
+/* Custom styles to complement Bootstrap dark theme */
+.card {
+    border-color: var(--bs-border-color);
+}
+
+.form-control:focus {
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb), 0.25);
+}

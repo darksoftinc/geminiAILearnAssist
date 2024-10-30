@@ -39,6 +39,12 @@ def list():
     curricula = Curriculum.query.all()
     return render_template('curriculum/list.html', curricula=curricula)
 
+@curriculum_bp.route('/curriculum/<int:id>')
+@login_required
+def view(id):
+    curriculum = Curriculum.query.get_or_404(id)
+    return render_template('curriculum/view.html', curriculum=curriculum)
+
 @curriculum_bp.route('/curriculum/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit(id):

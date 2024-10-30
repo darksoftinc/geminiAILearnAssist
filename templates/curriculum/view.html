@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}{{ curriculum.title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="card-title mb-4">{{ curriculum.title }}</h2>
+                    <div class="mb-4">
+                        <small class="text-muted">
+                            Created by {{ curriculum.author.username }} on {{ curriculum.created_at.strftime('%Y-%m-%d') }}
+                        </small>
+                    </div>
+                    <div class="curriculum-content mb-4">
+                        {{ curriculum.content|safe }}
+                    </div>
+                    
+                    {% if current_user.is_teacher and current_user.id == curriculum.author_id %}
+                    <div class="mb-4">
+                        <a href="{{ url_for('curriculum.edit', id=curriculum.id) }}" class="btn btn-secondary">Edit Curriculum</a>
+                        <a href="{{ url_for('quiz.create', curriculum_id=curriculum.id) }}" class="btn btn-primary">Create Quiz</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Available Quizzes</h5>
+                    <div class="list-group">
+                        {% for quiz in curriculum.quizzes %}
+                        <a href="{{ url_for('quiz.take', id=quiz.id) }}" class="list-group-item list-group-item-action">
+                            {{ quiz.title }}
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
