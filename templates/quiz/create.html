@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Quiz Oluştur{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="card-title mb-4">Yeni Quiz Oluştur</h2>
+                    <form method="POST" id="createQuizForm">
+                        <div class="mb-3">
+                            <label for="title" class="form-label">Quiz Başlığı</label>
+                            <input type="text" class="form-control" id="title" name="title" 
+                                   required maxlength="200" pattern=".{3,}" 
+                                   title="Başlık en az 3 karakter olmalıdır">
+                        </div>
+                        <div class="mb-3">
+                            <label for="num_questions" class="form-label">Soru Sayısı</label>
+                            <select class="form-select" id="num_questions" name="num_questions" required>
+                                <option value="" selected disabled>Soru sayısı seçin</option>
+                                <option value="5">5 Soru</option>
+                                <option value="10">10 Soru</option>
+                                <option value="15">15 Soru</option>
+                                <option value="20">20 Soru</option>
+                            </select>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary" id="submitBtn">
+                                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                                Quiz Oluştur
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('createQuizForm').addEventListener('submit', function(e) {
+    const submitBtn = document.getElementById('submitBtn');
+    const spinner = submitBtn.querySelector('.spinner-border');
+    
+    // Show loading state
+    submitBtn.disabled = true;
+    spinner.classList.remove('d-none');
+    submitBtn.textContent = ' Quiz Oluşturuluyor...';
+    submitBtn.prepend(spinner);
+});
+</script>
+{% endblock %}

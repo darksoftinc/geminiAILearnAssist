@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
-from models import Quiz, Question, QuizAttempt, db
-from ai_service import generate_quiz_questions
+from models import Quiz, Question, QuizAttempt, Curriculum, db
+from ai_service import generate_quiz_questions, AIServiceError
 
 quiz_bp = Blueprint('quiz', __name__)
 
@@ -9,33 +9,60 @@ quiz_bp = Blueprint('quiz', __name__)
 @login_required
 def create(curriculum_id):
     if not current_user.is_teacher:
-        flash('Only teachers can create quizzes')
+        flash('Bu işlemi sadece öğretmenler yapabilir.', 'error')
         return redirect(url_for('dashboard.index'))
     
+    # Verify curriculum exists
+    curriculum = Curriculum.query.get_or_404(curriculum_id)
+    
     if request.method == 'POST':
-        title = request.form.get('title')
-        num_questions = int(request.form.get('num_questions', 5))
+        title = request.form.get('title', '').strip()
+        try:
+            num_questions = int(request.form.get('num_questions', '5'))
+        except ValueError:
+            flash('Geçersiz soru sayısı seçildi.', 'error')
+            return render_template('quiz/create.html', curriculum_id=curriculum_id)
         
-        quiz = Quiz(
-            title=title,
-            curriculum_id=curriculum_id
-        )
-        db.session.add(quiz)
+        # Validate inputs
+        if not title:
+            flash('Quiz başlığı gereklidir.', 'error')
+            return render_template('quiz/create.html', curriculum_id=curriculum_id)
+            
+        if num_questions not in [5, 10, 15, 20]:
+            flash('Geçersiz soru sayısı seçildi.', 'error')
+            return render_template('quiz/create.html', curriculum_id=curriculum_id)
         
-        # Generate questions using Gemini AI
-        questions_data = generate_quiz_questions(quiz.curriculum.content, num_questions)
-        
-        for q_data in questions_data:
-            question = Question(
-                quiz_id=quiz.id,
-                question_text=q_data['question'],
-                correct_answer=q_data['correct_answer'],
-                options=q_data['options']
+        try:
+            quiz = Quiz(
+                title=title,
+                curriculum_id=curriculum_id
             )
-            db.session.add(question)
-        
-        db.session.commit()
-        return redirect(url_for('quiz.list'))
+            db.session.add(quiz)
+            db.session.flush()  # Get the quiz ID without committing
+            
+            # Generate questions using AI
+            questions_data = generate_quiz_questions(curriculum.content, num_questions)
+            
+            for q_data in questions_data:
+                question = Question(
+                    quiz_id=quiz.id,
+                    question_text=q_data['question'],
+                    correct_answer=q_data['correct_answer'],
+                    options=q_data['options']
+                )
+                db.session.add(question)
+            
+            db.session.commit()
+            flash('Quiz başarıyla oluşturuldu!', 'success')
+            return redirect(url_for('curriculum.view', id=curriculum_id))
+            
+        except AIServiceError as e:
+            flash(f'Quiz soruları oluşturulurken hata oluştu: {str(e)}', 'error')
+            return render_template('quiz/create.html', curriculum_id=curriculum_id)
+        except Exception as e:
+            db.session.rollback()
+            flash('Quiz oluşturulurken beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.', 'error')
+            return render_template('quiz/create.html', curriculum_id=curriculum_id)
     
     return render_template('quiz/create.html', curriculum_id=curriculum_id)
 
@@ -72,7 +99,7 @@ def take(id):
 def results(attempt_id):
     attempt = QuizAttempt.query.get_or_404(attempt_id)
     if attempt.user_id != current_user.id:
-        flash('You can only view your own results')
+        flash('Sadece kendi sonuçlarınızı görüntüleyebilirsiniz.', 'error')
         return redirect(url_for('dashboard.index'))
     
     return render_template('quiz/results.html', attempt=attempt)
