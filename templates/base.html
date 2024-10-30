@@ -7,6 +7,7 @@
     <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
@@ -33,6 +34,17 @@
                 </ul>
                 <ul class="navbar-nav">
                     {% if current_user.is_authenticated %}
+                        <li class="nav-item">
+                            <div class="dropdown">
+                                <button class="btn nav-link dropdown-toggle" type="button" id="notificationsDropdown" data-bs-toggle="dropdown">
+                                    <span class="badge bg-danger notification-badge d-none">0</span>
+                                    <i class="bi bi-bell"></i>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end" id="notificationsList">
+                                    <li><p class="dropdown-item">Henüz bildirim yok</p></li>
+                                </ul>
+                            </div>
+                        </li>
                         <li class="nav-item">
                             <span class="nav-link">Hoş geldin, {{ current_user.username }}</span>
                         </li>
@@ -69,6 +81,72 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const socket = io();
+            const notificationsList = document.getElementById('notificationsList');
+            const notificationBadge = document.querySelector('.notification-badge');
+            let unreadCount = 0;
+
+            socket.on('connect', function() {
+                {% if current_user.is_authenticated %}
+                    socket.emit('join', {
+                        user_id: {{ current_user.id }},
+                        is_teacher: {{ 'true' if current_user.is_teacher else 'false' }}
+                    });
+                {% endif %}
+            });
+
+            socket.on('notification', function(data) {
+                // Create notification element
+                const notification = document.createElement('li');
+                notification.innerHTML = `
+                    <div class="dropdown-item">
+                        <div class="d-flex justify-content-between">
+                            <strong>${data.quiz_title}</strong>
+                            <small class="text-muted">${data.timestamp}</small>
+                        </div>
+                        <p class="mb-0">${data.student_name} completed with score: ${data.score}%</p>
+                    </div>
+                `;
+                
+                // Add to notifications list
+                if (notificationsList.firstChild) {
+                    notificationsList.insertBefore(notification, notificationsList.firstChild);
+                } else {
+                    notificationsList.appendChild(notification);
+                }
+                
+                // Update unread count
+                unreadCount++;
+                notificationBadge.textContent = unreadCount;
+                notificationBadge.classList.remove('d-none');
+                
+                // Show toast notification
+                const toast = document.createElement('div');
+                toast.className = 'toast';
+                toast.setAttribute('role', 'alert');
+                toast.innerHTML = `
+                    <div class="toast-header">
+                        <strong class="me-auto">Quiz Completion</strong>
+                        <small>${data.timestamp}</small>
+                        <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+                    </div>
+                    <div class="toast-body">
+                        ${data.student_name} completed ${data.quiz_title} with score: ${data.score}%
+                    </div>
+                `;
+                document.body.appendChild(toast);
+                new bootstrap.Toast(toast).show();
+            });
+
+            // Reset unread count when notifications dropdown is opened
+            document.getElementById('notificationsDropdown').addEventListener('click', function() {
+                unreadCount = 0;
+                notificationBadge.classList.add('d-none');
+            });
+        });
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

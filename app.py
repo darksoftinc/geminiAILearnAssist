@@ -4,6 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from sqlalchemy.orm import DeclarativeBase
 import google.generativeai as genai
+import notifications
 
 class Base(DeclarativeBase):
     pass
@@ -30,6 +31,9 @@ app.config['GENAI_MODEL'] = genai.GenerativeModel('gemini-pro')
 db.init_app(app)
 login_manager.init_app(app)
 login_manager.login_view = 'auth.login'
+
+# Initialize SocketIO
+notifications.init_app(app)
 
 # Register blueprints
 with app.app_context():

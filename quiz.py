@@ -4,6 +4,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from models import Quiz, Question, QuizAttempt, Curriculum, db
 from ai_service import generate_quiz_questions, AIServiceError
+from notifications import emit_quiz_completion
 
 quiz_bp = Blueprint('quiz', __name__)
 
@@ -14,7 +15,6 @@ def create():
         flash('Bu işlemi sadece öğretmenler yapabilir.', 'error')
         return redirect(url_for('dashboard.index'))
     
-    # Get curricula created by the current teacher
     curricula = Curriculum.query.filter_by(author_id=current_user.id).all()
     
     if request.method == 'POST':
@@ -26,7 +26,6 @@ def create():
             flash('Geçersiz soru sayısı seçildi.', 'error')
             return render_template('quiz/create.html', curricula=curricula)
         
-        # Validate inputs
         if not title or not curriculum_id:
             flash('Quiz başlığı ve müfredat seçimi zorunludur.', 'error')
             return render_template('quiz/create.html', curricula=curricula)
@@ -35,26 +34,22 @@ def create():
             flash('Geçersiz soru sayısı seçildi.', 'error')
             return render_template('quiz/create.html', curricula=curricula)
         
-        # Verify curriculum exists and belongs to teacher
         curriculum = Curriculum.query.get_or_404(curriculum_id)
         if curriculum.author_id != current_user.id:
             flash('Sadece kendi müfredatınız için quiz oluşturabilirsiniz.', 'error')
             return render_template('quiz/create.html', curricula=curricula)
         
         try:
-            # Generate questions using AI
             current_app.logger.info(f"Quiz oluşturuluyor: {title}, Soru sayısı: {num_questions}")
             questions_data = generate_quiz_questions(curriculum.content, num_questions)
             
-            # Create quiz
             quiz = Quiz(
                 title=title,
                 curriculum_id=curriculum_id
             )
             db.session.add(quiz)
-            db.session.flush()  # Get the quiz ID without committing
+            db.session.flush()
             
-            # Add questions
             for q_data in questions_data:
                 question = Question(
                     quiz_id=quiz.id,
@@ -105,6 +100,9 @@ def take(id):
         )
         db.session.add(attempt)
         db.session.commit()
+        
+        # Emit real-time notification
+        emit_quiz_completion(attempt)
         
         flash(f'Quiz tamamlandı! Puanınız: {final_score:.1f}%', 'success')
         return redirect(url_for('quiz.results', attempt_id=attempt.id))
