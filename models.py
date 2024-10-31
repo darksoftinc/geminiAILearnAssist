@@ -25,6 +25,7 @@ class Student(db.Model):
     
     # Relationships
     quiz_attempts = db.relationship('QuizAttempt', backref='student_profile', lazy=True)
+    quiz_assignments = db.relationship('QuizAssignment', backref='student', lazy=True)
 
 class Curriculum(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -46,6 +47,7 @@ class Quiz(db.Model):
     # Relationships
     questions = db.relationship('Question', backref='quiz', lazy=True)
     attempts = db.relationship('QuizAttempt', backref='quiz', lazy=True)
+    assignments = db.relationship('QuizAssignment', backref='quiz', lazy=True)
 
 class Question(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -61,3 +63,10 @@ class QuizAttempt(db.Model):
     student_id = db.Column(db.Integer, db.ForeignKey('student.id'), nullable=True)
     score = db.Column(db.Float)
     completed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class QuizAssignment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    quiz_id = db.Column(db.Integer, db.ForeignKey('quiz.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('student.id'), nullable=False)
+    assigned_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed = db.Column(db.Boolean, default=False)

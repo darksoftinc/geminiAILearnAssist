@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from flask_login import login_required, current_user
-from models import Quiz, Question, QuizAttempt, Student, Curriculum, db
+from models import Quiz, Question, QuizAttempt, Student, Curriculum, QuizAssignment, db
 from ai_service import generate_quiz_questions, AIServiceError
 from notifications import emit_quiz_completion
 
@@ -14,28 +14,35 @@ def create():
         return redirect(url_for('dashboard.index'))
     
     curricula = Curriculum.query.filter_by(author_id=current_user.id).all()
+    students = Student.query.filter_by(teacher_id=current_user.id).all()
     
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
         curriculum_id = request.form.get('curriculum_id')
+        selected_students = request.form.getlist('selected_students')
+        
         try:
             num_questions = int(request.form.get('num_questions', '5'))
         except ValueError:
             flash('Geçersiz soru sayısı seçildi.', 'error')
-            return render_template('quiz/create.html', curricula=curricula)
+            return render_template('quiz/create.html', curricula=curricula, students=students)
         
         if not title or not curriculum_id:
             flash('Quiz başlığı ve müfredat seçimi zorunludur.', 'error')
-            return render_template('quiz/create.html', curricula=curricula)
+            return render_template('quiz/create.html', curricula=curricula, students=students)
+            
+        if not selected_students:
+            flash('En az bir öğrenci seçmelisiniz.', 'error')
+            return render_template('quiz/create.html', curricula=curricula, students=students)
             
         if num_questions not in [5, 10, 15, 20]:
             flash('Geçersiz soru sayısı seçildi.', 'error')
-            return render_template('quiz/create.html', curricula=curricula)
+            return render_template('quiz/create.html', curricula=curricula, students=students)
         
         curriculum = Curriculum.query.get_or_404(curriculum_id)
         if curriculum.author_id != current_user.id:
             flash('Sadece kendi müfredatınız için quiz oluşturabilirsiniz.', 'error')
-            return render_template('quiz/create.html', curricula=curricula)
+            return render_template('quiz/create.html', curricula=curricula, students=students)
         
         try:
             current_app.logger.info(f"Quiz oluşturuluyor: {title}, Soru sayısı: {num_questions}")
@@ -57,28 +64,49 @@ def create():
                 )
                 db.session.add(question)
             
+            # Create quiz assignments for selected students
+            for student_id in selected_students:
+                assignment = QuizAssignment(
+                    quiz_id=quiz.id,
+                    student_id=int(student_id)
+                )
+                db.session.add(assignment)
+            
             db.session.commit()
             current_app.logger.info(f"Quiz başarıyla oluşturuldu: ID={quiz.id}")
-            flash('Quiz başarıyla oluşturuldu!', 'success')
+            flash('Quiz başarıyla oluşturuldu ve seçilen öğrencilere atandı!', 'success')
             return redirect(url_for('curriculum.view', id=curriculum_id))
             
         except AIServiceError as e:
             current_app.logger.error(f"AI Servisi Hatası: {str(e)}")
             flash(f'Quiz oluşturulurken hata: {str(e)}', 'error')
-            return render_template('quiz/create.html', curricula=curricula)
+            return render_template('quiz/create.html', curricula=curricula, students=students)
             
         except Exception as e:
             current_app.logger.error(f"Quiz oluşturma hatası: {str(e)}")
             db.session.rollback()
             flash('Quiz oluşturulurken beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.', 'error')
-            return render_template('quiz/create.html', curricula=curricula)
+            return render_template('quiz/create.html', curricula=curricula, students=students)
     
-    return render_template('quiz/create.html', curricula=curricula)
+    return render_template('quiz/create.html', curricula=curricula, students=students)
 
 @quiz_bp.route('/quiz/<int:id>/take', methods=['GET', 'POST'])
 @login_required
 def take(id):
     quiz = Quiz.query.get_or_404(id)
+    student = None if current_user.is_teacher else Student.query.filter_by(email=current_user.email).first()
+    
+    # Check if the student is assigned to this quiz
+    if student:
+        assignment = QuizAssignment.query.filter_by(
+            quiz_id=quiz.id,
+            student_id=student.id,
+            completed=False
+        ).first()
+        
+        if not assignment:
+            flash('Bu quizi almaya yetkiniz yok veya daha önce tamamladınız.', 'error')
+            return redirect(url_for('dashboard.index'))
     
     if request.method == 'POST':
         score = 0
@@ -91,11 +119,6 @@ def take(id):
         
         final_score = (score / total_questions) * 100
         
-        # Get student_id if the current user is a student
-        student = None
-        if not current_user.is_teacher:
-            student = Student.query.filter_by(email=current_user.email).first()
-        
         attempt = QuizAttempt(
             user_id=current_user.id,
             quiz_id=quiz.id,
@@ -105,6 +128,11 @@ def take(id):
         
         try:
             db.session.add(attempt)
+            
+            # Mark the assignment as completed
+            if student:
+                assignment.completed = True
+                
             db.session.commit()
             
             # Emit real-time notification

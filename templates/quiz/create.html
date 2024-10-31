@@ -35,6 +35,28 @@
                                 <option value="20">20 Soru</option>
                             </select>
                         </div>
+                        <div class="mb-3">
+                            <label class="form-label">Öğrenci Seçimi</label>
+                            <div class="card">
+                                <div class="card-body">
+                                    {% for student in students %}
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" 
+                                                   name="selected_students" value="{{ student.id }}"
+                                                   id="student_{{ student.id }}">
+                                            <label class="form-check-label" for="student_{{ student.id }}">
+                                                {{ student.name }} ({{ student.grade }}. Sınıf)
+                                            </label>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% if not students %}
+                                <div class="alert alert-info mt-2">
+                                    Henüz öğrenci eklenmemiş. Önce <a href="{{ url_for('student.create') }}">öğrenci ekleyin</a>.
+                                </div>
+                            {% endif %}
+                        </div>
                         <div class="d-grid">
                             <button type="submit" class="btn btn-primary" id="submitBtn">
                                 <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
@@ -55,6 +77,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('createQuizForm');
     if (form) {
         form.addEventListener('submit', function(e) {
+            const selectedStudents = document.querySelectorAll('input[name="selected_students"]:checked');
+            if (selectedStudents.length === 0) {
+                e.preventDefault();
+                alert('En az bir öğrenci seçmelisiniz.');
+                return;
+            }
+            
             const submitBtn = document.getElementById('submitBtn');
             const spinner = submitBtn.querySelector('.spinner-border');
             
