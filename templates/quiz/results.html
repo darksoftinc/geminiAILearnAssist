@@ -9,6 +9,17 @@
             <div class="card">
                 <div class="card-body">
                     <h2 class="card-title mb-4">{{ attempt.quiz.title }} - Sonuçlar</h2>
+                    
+                    {% if attempt.student_id %}
+                    <div class="alert alert-info">
+                        <h5>Öğrenci Bilgileri:</h5>
+                        <p>
+                            <strong>İsim:</strong> {{ attempt.student_profile.name }}<br>
+                            <strong>Sınıf:</strong> {{ attempt.student_profile.grade }}. Sınıf
+                        </p>
+                    </div>
+                    {% endif %}
+                    
                     <div class="alert alert-info">
                         <h4>Toplam Puan: {{ "%.1f"|format(attempt.score) }}%</h4>
                     </div>

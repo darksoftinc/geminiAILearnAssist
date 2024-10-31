@@ -1,8 +1,6 @@
-import json
-import logging
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from flask_login import login_required, current_user
-from models import Quiz, Question, QuizAttempt, Curriculum, db
+from models import Quiz, Question, QuizAttempt, Student, db
 from ai_service import generate_quiz_questions, AIServiceError
 from notifications import emit_quiz_completion
 
@@ -93,19 +91,32 @@ def take(id):
         
         final_score = (score / total_questions) * 100
         
+        # Get student_id if the current user is a student
+        student = None
+        if not current_user.is_teacher:
+            student = Student.query.filter_by(email=current_user.email).first()
+        
         attempt = QuizAttempt(
             user_id=current_user.id,
             quiz_id=quiz.id,
+            student_id=student.id if student else None,
             score=final_score
         )
-        db.session.add(attempt)
-        db.session.commit()
         
-        # Emit real-time notification
-        emit_quiz_completion(attempt)
-        
-        flash(f'Quiz tamamlandı! Puanınız: {final_score:.1f}%', 'success')
-        return redirect(url_for('quiz.results', attempt_id=attempt.id))
+        try:
+            db.session.add(attempt)
+            db.session.commit()
+            
+            # Emit real-time notification
+            emit_quiz_completion(attempt)
+            
+            flash(f'Quiz tamamlandı! Puanınız: {final_score:.1f}%', 'success')
+            return redirect(url_for('quiz.results', attempt_id=attempt.id))
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Quiz attempt save error: {str(e)}")
+            flash('Quiz sonucu kaydedilirken bir hata oluştu.', 'error')
+            return redirect(url_for('dashboard.index'))
     
     return render_template('quiz/take.html', quiz=quiz)
 
@@ -113,8 +124,8 @@ def take(id):
 @login_required
 def results(attempt_id):
     attempt = QuizAttempt.query.get_or_404(attempt_id)
-    if attempt.user_id != current_user.id:
-        flash('Sadece kendi sonuçlarınızı görüntüleyebilirsiniz.', 'error')
+    if attempt.user_id != current_user.id and not current_user.is_teacher:
+        flash('Bu sonucu görüntüleme yetkiniz yok.', 'error')
         return redirect(url_for('dashboard.index'))
     
     return render_template('quiz/results.html', attempt=attempt)
