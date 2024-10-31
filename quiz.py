@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from flask_login import login_required, current_user
-from models import Quiz, Question, QuizAttempt, Student, db
+from models import Quiz, Question, QuizAttempt, Student, Curriculum, db
 from ai_service import generate_quiz_questions, AIServiceError
 from notifications import emit_quiz_completion
 

@@ -51,15 +51,22 @@
 
 {% block scripts %}
 <script>
-document.getElementById('createQuizForm').addEventListener('submit', function(e) {
-    const submitBtn = document.getElementById('submitBtn');
-    const spinner = submitBtn.querySelector('.spinner-border');
-    
-    // Show loading state
-    submitBtn.disabled = true;
-    spinner.classList.remove('d-none');
-    submitBtn.textContent = ' Quiz Oluşturuluyor...';
-    submitBtn.prepend(spinner);
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('createQuizForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const submitBtn = document.getElementById('submitBtn');
+            const spinner = submitBtn.querySelector('.spinner-border');
+            
+            if (submitBtn && spinner) {
+                // Show loading state
+                submitBtn.disabled = true;
+                spinner.classList.remove('d-none');
+                submitBtn.textContent = ' Quiz Oluşturuluyor...';
+                submitBtn.prepend(spinner);
+            }
+        });
+    }
 });
 </script>
 {% endblock %}
