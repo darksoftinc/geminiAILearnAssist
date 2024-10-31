@@ -1,38 +1,83 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard{% endblock %}
+{% block title %}Gösterge Paneli{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-md-8">
-        <h2>Welcome to your learning dashboard</h2>
+        <h2>Eğitim Platformuna Hoş Geldiniz</h2>
         
         {% if current_user.is_teacher %}
             <div class="card mb-4">
                 <div class="card-body">
-                    <h5 class="card-title">Teacher Dashboard</h5>
-                    <p class="card-text">Manage your curricula and quizzes</p>
-                    <a href="{{ url_for('curriculum.create') }}" class="btn btn-primary">Create New Curriculum</a>
+                    <h5 class="card-title">Öğretmen Paneli</h5>
+                    <p class="card-text">Müfredatlarınızı ve quizlerinizi yönetin</p>
+                    <div class="d-flex gap-2">
+                        <a href="{{ url_for('curriculum.create') }}" class="btn btn-primary">
+                            <i class="bi bi-plus-circle me-1"></i>Yeni Müfredat
+                        </a>
+                        <a href="{{ url_for('student.create') }}" class="btn btn-outline-primary">
+                            <i class="bi bi-person-plus me-1"></i>Yeni Öğrenci
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Student Performance Overview -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Öğrenci Performans Özeti</h5>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Öğrenci</th>
+                                    <th>Son Quiz</th>
+                                    <th>Puan</th>
+                                    <th>Tarih</th>
+                                    <th>Detaylar</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for attempt in recent_student_attempts %}
+                                <tr>
+                                    <td>{{ attempt.student_profile.name }}</td>
+                                    <td>{{ attempt.quiz.title }}</td>
+                                    <td>{{ "%.1f"|format(attempt.score) }}%</td>
+                                    <td>{{ attempt.completed_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td>
+                                        <a href="{{ url_for('analytics.index', student_id=attempt.student_id) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            Detaylar
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         {% endif %}
         
         <div class="card mb-4">
             <div class="card-body">
-                <h5 class="card-title">Your Progress</h5>
+                <h5 class="card-title">İlerleme Grafiği</h5>
                 <canvas id="progressChart"></canvas>
             </div>
         </div>
         
         <div class="card">
             <div class="card-body">
-                <h5 class="card-title">Recent Quizzes</h5>
+                <h5 class="card-title">Son Quizler</h5>
                 <div class="list-group">
                     {% for attempt in current_user.quiz_attempts[-5:] %}
                         <div class="list-group-item">
-                            <h6>{{ attempt.quiz.title }}</h6>
-                            <p>Score: {{ "%.2f"|format(attempt.score) }}%</p>
-                            <small class="text-muted">Completed: {{ attempt.completed_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">{{ attempt.quiz.title }}</h6>
+                                <small class="text-muted">{{ attempt.completed_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                            </div>
+                            <p class="mb-1">Puan: {{ "%.1f"|format(attempt.score) }}%</p>
                         </div>
                     {% endfor %}
                 </div>
@@ -43,16 +88,39 @@
     <div class="col-md-4">
         <div class="card mb-4">
             <div class="card-body">
-                <h5 class="card-title">Available Curricula</h5>
+                <h5 class="card-title">Mevcut Müfredatlar</h5>
                 <div class="list-group">
                     {% for curriculum in curricula %}
-                        <a href="{{ url_for('curriculum.view', id=curriculum.id) }}" class="list-group-item list-group-item-action">
+                        <a href="{{ url_for('curriculum.view', id=curriculum.id) }}" 
+                           class="list-group-item list-group-item-action">
                             {{ curriculum.title }}
                         </a>
                     {% endfor %}
                 </div>
             </div>
         </div>
+        
+        {% if current_user.is_teacher %}
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Hızlı İstatistikler</h5>
+                <ul class="list-group">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Toplam Öğrenci
+                        <span class="badge bg-primary rounded-pill">{{ total_students }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Aktif Quizler
+                        <span class="badge bg-primary rounded-pill">{{ active_quizzes }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Tamamlanan Quizler
+                        <span class="badge bg-primary rounded-pill">{{ completed_quizzes }}</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
@@ -66,7 +134,7 @@ document.addEventListener('DOMContentLoaded', function() {
         data: {
             labels: {{ dates|tojson }},
             datasets: [{
-                label: 'Quiz Scores',
+                label: 'Quiz Puanları',
                 data: {{ scores|tojson }},
                 borderColor: 'rgb(75, 192, 192)',
                 tension: 0.1

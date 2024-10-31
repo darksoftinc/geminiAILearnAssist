@@ -1,6 +1,6 @@
-from flask import Blueprint, render_template, jsonify
+from flask import Blueprint, render_template, jsonify, request
 from flask_login import login_required, current_user
-from models import User, QuizAttempt, Quiz, Curriculum
+from models import User, QuizAttempt, Quiz, Curriculum, Student
 from sqlalchemy import func, desc
 from datetime import datetime, timedelta
 import pandas as pd
@@ -10,8 +10,23 @@ analytics_bp = Blueprint('analytics', __name__)
 @analytics_bp.route('/analytics')
 @login_required
 def index():
+    selected_student_id = request.args.get('student_id', type=int)
+    
     # Get user's quiz attempts
-    attempts = QuizAttempt.query.filter_by(user_id=current_user.id).all()
+    if current_user.is_teacher:
+        if selected_student_id:
+            student = Student.query.get_or_404(selected_student_id)
+            if student.teacher_id != current_user.id:
+                flash('Bu öğrencinin verilerine erişim yetkiniz yok.', 'error')
+                return redirect(url_for('dashboard.index'))
+            attempts = QuizAttempt.query.filter_by(student_id=selected_student_id).all()
+        else:
+            # Get all students' attempts for this teacher
+            attempts = QuizAttempt.query.join(Student).filter(
+                Student.teacher_id == current_user.id
+            ).all()
+    else:
+        attempts = QuizAttempt.query.filter_by(user_id=current_user.id).all()
     
     # Calculate overall statistics
     total_quizzes = len(attempts)
@@ -22,7 +37,8 @@ def index():
             {
                 'date': attempt.completed_at.strftime('%Y-%m-%d'),
                 'score': attempt.score,
-                'quiz': attempt.quiz.title
+                'quiz': attempt.quiz.title,
+                'student': attempt.student_profile.name if attempt.student_profile else attempt.student.username
             }
             for attempt in sorted(attempts, key=lambda x: x.completed_at, reverse=True)[:5]
         ]
@@ -47,28 +63,49 @@ def index():
     for curriculum in curriculum_performance.values():
         curriculum['average'] = curriculum['total_score'] / curriculum['attempts']
 
-    # Get peer comparison data (for students)
-    if not current_user.is_teacher:
-        peer_data = QuizAttempt.query.join(Quiz).join(User).filter(
-            User.is_teacher == False,
-            User.id != current_user.id
-        ).with_entities(
-            func.avg(QuizAttempt.score).label('peer_average')
-        ).scalar() or 0
-    else:
-        peer_data = None
+    # Get student list for teachers
+    students = []
+    student_performance = {}
+    if current_user.is_teacher:
+        students = Student.query.filter_by(teacher_id=current_user.id).all()
+        
+        # Calculate performance for each student
+        for student in students:
+            student_attempts = QuizAttempt.query.filter_by(student_id=student.id).all()
+            if student_attempts:
+                avg_score = sum(a.score for a in student_attempts) / len(student_attempts)
+                recent_score = max(student_attempts, key=lambda x: x.completed_at).score
+                improvement = recent_score - min(a.score for a in student_attempts)
+            else:
+                avg_score = 0
+                recent_score = 0
+                improvement = 0
+                
+            student_performance[student.id] = {
+                'name': student.name,
+                'average_score': avg_score,
+                'recent_score': recent_score,
+                'total_attempts': len(student_attempts),
+                'improvement': improvement
+            }
 
     # Get class performance data (for teachers)
     class_performance = None
     if current_user.is_teacher:
         class_performance = {
-            'total_students': User.query.filter_by(is_teacher=False).count(),
-            'total_attempts': QuizAttempt.query.join(User).filter(User.is_teacher==False).count(),
-            'class_average': QuizAttempt.query.join(User).filter(
-                User.is_teacher==False
+            'total_students': len(students),
+            'total_attempts': QuizAttempt.query.join(Student).filter(
+                Student.teacher_id == current_user.id
+            ).count(),
+            'class_average': QuizAttempt.query.join(Student).filter(
+                Student.teacher_id == current_user.id
             ).with_entities(
                 func.avg(QuizAttempt.score).label('average')
-            ).scalar() or 0
+            ).scalar() or 0,
+            'recent_completion_rate': len([
+                a for a in attempts 
+                if a.completed_at >= datetime.utcnow() - timedelta(days=7)
+            ]) / max(len(attempts), 1) * 100 if attempts else 0
         }
 
     return render_template(
@@ -78,33 +115,30 @@ def index():
         highest_score=highest_score,
         recent_trend=recent_trend,
         curriculum_performance=curriculum_performance,
-        peer_average=peer_data,
+        students=students,
+        student_performance=student_performance,
+        selected_student_id=selected_student_id,
         class_performance=class_performance
     )
 
-@analytics_bp.route('/analytics/performance_trends')
+@analytics_bp.route('/analytics/student/<int:student_id>/performance')
 @login_required
-def performance_trends():
-    timeframes = {
-        'week': datetime.now() - timedelta(days=7),
-        'month': datetime.now() - timedelta(days=30),
-        'year': datetime.now() - timedelta(days=365)
+def student_performance(student_id):
+    if not current_user.is_teacher:
+        return jsonify({'error': 'Yetkisiz erişim'}), 403
+        
+    student = Student.query.get_or_404(student_id)
+    if student.teacher_id != current_user.id:
+        return jsonify({'error': 'Bu öğrencinin verilerine erişim yetkiniz yok'}), 403
+        
+    attempts = QuizAttempt.query.filter_by(student_id=student_id).order_by(
+        QuizAttempt.completed_at
+    ).all()
+    
+    performance_data = {
+        'dates': [a.completed_at.strftime('%Y-%m-%d') for a in attempts],
+        'scores': [a.score for a in attempts],
+        'quizzes': [a.quiz.title for a in attempts]
     }
     
-    trends = {}
-    for period, start_date in timeframes.items():
-        attempts = QuizAttempt.query.filter(
-            QuizAttempt.user_id == current_user.id,
-            QuizAttempt.completed_at >= start_date
-        ).order_by(QuizAttempt.completed_at).all()
-        
-        trends[period] = [
-            {
-                'date': attempt.completed_at.strftime('%Y-%m-%d'),
-                'score': attempt.score,
-                'quiz': attempt.quiz.title
-            }
-            for attempt in attempts
-        ]
-    
-    return jsonify(trends)
+    return jsonify(performance_data)

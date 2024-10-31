@@ -1,37 +1,72 @@
 {% extends "base.html" %}
 
-{% block title %}Performance Analytics{% endblock %}
+{% block title %}Performans Analizi{% endblock %}
 
 {% block content %}
 <div class="container">
-    <h2 class="mb-4">Performance Analytics</h2>
+    <h2 class="mb-4">Performans Analizi</h2>
+    
+    {% if current_user.is_teacher %}
+    <!-- Student Filter -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Öğrenci Filtresi</h5>
+            <form method="GET" class="row g-3 align-items-end">
+                <div class="col-md-6">
+                    <label for="student_id" class="form-label">Öğrenci Seçin</label>
+                    <select class="form-select" id="student_id" name="student_id">
+                        <option value="">Tüm Öğrenciler</option>
+                        {% for student in students %}
+                        <option value="{{ student.id }}" {% if selected_student_id == student.id %}selected{% endif %}>
+                            {{ student.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary">Filtrele</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
     
     <!-- Overview Cards -->
     <div class="row mb-4">
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Total Quizzes Taken</h5>
+                    <h5 class="card-title">Toplam Quiz</h5>
                     <h2 class="card-text">{{ total_quizzes }}</h2>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Average Score</h5>
+                    <h5 class="card-title">Ortalama Puan</h5>
                     <h2 class="card-text">{{ "%.1f"|format(average_score) }}%</h2>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Highest Score</h5>
+                    <h5 class="card-title">En Yüksek Puan</h5>
                     <h2 class="card-text">{{ "%.1f"|format(highest_score) }}%</h2>
                 </div>
             </div>
         </div>
+        {% if current_user.is_teacher and class_performance %}
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Haftalık Tamamlama</h5>
+                    <h2 class="card-text">{{ "%.1f"|format(class_performance.recent_completion_rate) }}%</h2>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Performance Trends -->
@@ -39,11 +74,11 @@
         <div class="col-12">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Performance Trends</h5>
+                    <h5 class="card-title">Performans Grafiği</h5>
                     <div class="btn-group mb-3" role="group">
-                        <button type="button" class="btn btn-outline-primary active" data-period="week">Week</button>
-                        <button type="button" class="btn btn-outline-primary" data-period="month">Month</button>
-                        <button type="button" class="btn btn-outline-primary" data-period="year">Year</button>
+                        <button type="button" class="btn btn-outline-primary active" data-period="week">Hafta</button>
+                        <button type="button" class="btn btn-outline-primary" data-period="month">Ay</button>
+                        <button type="button" class="btn btn-outline-primary" data-period="year">Yıl</button>
                     </div>
                     <canvas id="trendsChart"></canvas>
                 </div>
@@ -51,12 +86,62 @@
         </div>
     </div>
 
+    {% if current_user.is_teacher and not selected_student_id %}
+    <!-- Student Performance Overview -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Öğrenci Performans Özeti</h5>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Öğrenci</th>
+                                    <th>Ortalama Puan</th>
+                                    <th>Son Quiz Puanı</th>
+                                    <th>Toplam Quiz</th>
+                                    <th>İlerleme</th>
+                                    <th>Detaylar</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for student in students %}
+                                {% set performance = student_performance[student.id] %}
+                                <tr>
+                                    <td>{{ student.name }}</td>
+                                    <td>{{ "%.1f"|format(performance.average_score) }}%</td>
+                                    <td>{{ "%.1f"|format(performance.recent_score) }}%</td>
+                                    <td>{{ performance.total_attempts }}</td>
+                                    <td>
+                                        {% if performance.improvement > 0 %}
+                                        <span class="text-success">+{{ "%.1f"|format(performance.improvement) }}%</span>
+                                        {% else %}
+                                        <span class="text-danger">{{ "%.1f"|format(performance.improvement) }}%</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="?student_id={{ student.id }}" class="btn btn-sm btn-outline-primary">
+                                            Detaylar
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Curriculum Performance -->
     <div class="row mb-4">
         <div class="col-md-6">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Curriculum Performance</h5>
+                    <h5 class="card-title">Müfredat Bazlı Performans</h5>
                     <canvas id="curriculumChart"></canvas>
                 </div>
             </div>
@@ -64,7 +149,7 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Recent Quiz Results</h5>
+                    <h5 class="card-title">Son Quiz Sonuçları</h5>
                     <div class="list-group">
                         {% for result in recent_trend %}
                         <div class="list-group-item">
@@ -72,7 +157,12 @@
                                 <h6 class="mb-1">{{ result.quiz }}</h6>
                                 <small>{{ result.date }}</small>
                             </div>
-                            <p class="mb-1">Score: {{ "%.1f"|format(result.score) }}%</p>
+                            <p class="mb-1">
+                                {% if current_user.is_teacher %}
+                                <strong>Öğrenci:</strong> {{ result.student }} |
+                                {% endif %}
+                                <strong>Puan:</strong> {{ "%.1f"|format(result.score) }}%
+                            </p>
                         </div>
                         {% endfor %}
                     </div>
@@ -81,56 +171,34 @@
         </div>
     </div>
 
-    {% if not current_user.is_teacher %}
-    <!-- Peer Comparison -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Peer Comparison</h5>
-                    <div class="row align-items-center">
-                        <div class="col-md-6">
-                            <canvas id="peerComparisonChart"></canvas>
-                        </div>
-                        <div class="col-md-6">
-                            <p>Your average score: {{ "%.1f"|format(average_score) }}%</p>
-                            <p>Peer average score: {{ "%.1f"|format(peer_average) }}%</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
     {% if current_user.is_teacher and class_performance %}
-    <!-- Class Performance (Teachers Only) -->
+    <!-- Class Performance Overview -->
     <div class="row mb-4">
         <div class="col-12">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Class Performance Overview</h5>
+                    <h5 class="card-title">Sınıf Performans Özeti</h5>
                     <div class="row">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <div class="card">
                                 <div class="card-body">
-                                    <h6 class="card-subtitle mb-2 text-muted">Total Students</h6>
+                                    <h6 class="card-subtitle mb-2 text-muted">Toplam Öğrenci</h6>
                                     <p class="card-text h3">{{ class_performance.total_students }}</p>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <div class="card">
                                 <div class="card-body">
-                                    <h6 class="card-subtitle mb-2 text-muted">Total Quiz Attempts</h6>
+                                    <h6 class="card-subtitle mb-2 text-muted">Toplam Quiz Denemesi</h6>
                                     <p class="card-text h3">{{ class_performance.total_attempts }}</p>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <div class="card">
                                 <div class="card-body">
-                                    <h6 class="card-subtitle mb-2 text-muted">Class Average</h6>
+                                    <h6 class="card-subtitle mb-2 text-muted">Sınıf Ortalaması</h6>
                                     <p class="card-text h3">{{ "%.1f"|format(class_performance.class_average) }}%</p>
                                 </div>
                             </div>
@@ -147,14 +215,13 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Performance Trends Chart
     const trendsCtx = document.getElementById('trendsChart').getContext('2d');
     const trendsChart = new Chart(trendsCtx, {
         type: 'line',
         data: {
             labels: {{ recent_trend|map(attribute='date')|list|tojson }},
             datasets: [{
-                label: 'Quiz Scores',
+                label: 'Quiz Puanları',
                 data: {{ recent_trend|map(attribute='score')|list|tojson }},
                 borderColor: 'rgb(75, 192, 192)',
                 tension: 0.1
@@ -178,7 +245,7 @@ document.addEventListener('DOMContentLoaded', function() {
         data: {
             labels: {{ curriculum_performance.keys()|list|tojson }},
             datasets: [{
-                label: 'Average Score',
+                label: 'Ortalama Puan',
                 data: {{ curriculum_performance.values()|map(attribute='average')|list|tojson }},
                 backgroundColor: 'rgba(75, 192, 192, 0.2)',
                 borderColor: 'rgb(75, 192, 192)',
@@ -196,50 +263,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    {% if not current_user.is_teacher %}
-    // Peer Comparison Chart
-    const peerCtx = document.getElementById('peerComparisonChart').getContext('2d');
-    const peerChart = new Chart(peerCtx, {
-        type: 'bar',
-        data: {
-            labels: ['Your Average', 'Peer Average'],
-            datasets: [{
-                data: [{{ average_score }}, {{ peer_average }}],
-                backgroundColor: [
-                    'rgba(75, 192, 192, 0.2)',
-                    'rgba(153, 102, 255, 0.2)'
-                ],
-                borderColor: [
-                    'rgb(75, 192, 192)',
-                    'rgb(153, 102, 255)'
-                ],
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    display: false
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 100
-                }
-            }
-        }
-    });
-    {% endif %}
-
     // Handle period selection for trends
     document.querySelectorAll('[data-period]').forEach(button => {
         button.addEventListener('click', function() {
             document.querySelectorAll('[data-period]').forEach(btn => btn.classList.remove('active'));
             this.classList.add('active');
             
-            fetch(`/analytics/performance_trends?period=${this.dataset.period}`)
+            const studentId = document.getElementById('student_id')?.value || '';
+            fetch(`/analytics/performance_trends?period=${this.dataset.period}&student_id=${studentId}`)
                 .then(response => response.json())
                 .then(data => {
                     const period = this.dataset.period;
