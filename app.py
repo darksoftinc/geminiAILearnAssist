@@ -53,10 +53,9 @@ with app.app_context():
     app.register_blueprint(student_bp)
     app.register_blueprint(google_auth, url_prefix='/')
     
-    # Import models and recreate tables
+    # Import models and create tables if they don't exist
     import models
-    db.drop_all()  # Drop all existing tables
-    db.create_all()  # Create all tables with updated schema
+    db.create_all()
 
 @login_manager.user_loader
 def load_user(user_id):
