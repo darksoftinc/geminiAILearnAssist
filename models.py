@@ -23,12 +23,6 @@ class Student(db.Model):
     teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # Relationships with cascade delete
-    quiz_attempts = db.relationship('QuizAttempt', backref='student', lazy=True, 
-                                  cascade='all, delete-orphan')
-    quiz_assignments = db.relationship('QuizAssignment', backref='student', lazy=True,
-                                     cascade='all, delete-orphan')
-
     __table_args__ = (
         db.Index('idx_student_teacher', teacher_id),  # Index for faster teacher lookups
     )
@@ -69,6 +63,9 @@ class QuizAttempt(db.Model):
     student_id = db.Column(db.Integer, db.ForeignKey('student.id'), nullable=True)
     score = db.Column(db.Float)
     completed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Define the relationship with Student model
+    student_profile = db.relationship('Student', backref='attempts', foreign_keys=[student_id])
     
     __table_args__ = (
         db.Index('idx_student_completed', student_id, completed_at),  # Index for faster student performance queries

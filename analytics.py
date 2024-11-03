@@ -56,7 +56,7 @@ def index():
                 'date': attempt.completed_at.strftime('%Y-%m-%d'),
                 'score': attempt.score,
                 'quiz': attempt.quiz.title,
-                'student': attempt.student.name if attempt.student else current_user.username,
+                'student': attempt.student_profile.name if attempt.student_profile else current_user.username,
                 'curriculum': attempt.quiz.curriculum.title
             }
             for attempt in sorted(attempts, key=lambda x: x.completed_at, reverse=True)[:10]
@@ -103,7 +103,11 @@ def index():
         
         for student in students:
             student_attempts = QuizAttempt.query\
-                .filter_by(student_id=student.id)\
+                .join(Student)\
+                .filter(
+                    QuizAttempt.student_id == student.id,
+                    Student.teacher_id == current_user.id
+                )\
                 .order_by(QuizAttempt.completed_at.desc())\
                 .all()
             
@@ -128,7 +132,7 @@ def index():
                 'weekly_progress': weekly_progress
             }
     
-    # Calculate class-wide performance metrics
+    # Calculate class-wide performance metrics for teachers
     class_performance = None
     if current_user.is_teacher:
         total_class_attempts = QuizAttempt.query\
