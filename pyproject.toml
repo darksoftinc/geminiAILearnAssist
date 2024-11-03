@@ -18,4 +18,5 @@ dependencies = [
     "flask-socketio>=5.4.1",
     "eventlet>=0.37.0",
     "pandas>=2.2.3",
+    "reportlab",
 ]

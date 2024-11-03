@@ -4,7 +4,17 @@
 
 {% block content %}
 <div class="container">
-    <h2 class="mb-4">Performans Analizi</h2>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Performans Analizi</h2>
+        <div class="btn-group">
+            <a href="{{ url_for('analytics.export_csv', student_id=selected_student_id) }}" class="btn btn-outline-primary">
+                <i class="bi bi-file-earmark-spreadsheet me-1"></i>CSV İndir
+            </a>
+            <a href="{{ url_for('analytics.export_pdf', student_id=selected_student_id) }}" class="btn btn-outline-primary">
+                <i class="bi bi-file-earmark-pdf me-1"></i>PDF İndir
+            </a>
+        </div>
+    </div>
     
     {% if current_user.is_teacher %}
     <!-- Student Filter -->

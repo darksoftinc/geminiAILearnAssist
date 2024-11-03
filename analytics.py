@@ -1,10 +1,16 @@
-# Add new imports for advanced analytics
-from flask import Blueprint, render_template, jsonify, request, flash, redirect, url_for
+from flask import Blueprint, render_template, jsonify, request, flash, redirect, url_for, send_file
 from flask_login import login_required, current_user
 from models import User, QuizAttempt, Quiz, Curriculum, Student, db
 from sqlalchemy import func, desc, and_, extract, case
 from datetime import datetime, timedelta
 import statistics
+import pandas as pd
+import io
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
 
 analytics_bp = Blueprint('analytics', __name__)
 
@@ -13,7 +19,6 @@ analytics_bp = Blueprint('analytics', __name__)
 def index():
     selected_student_id = request.args.get('student_id', type=int)
     
-    # Base query with proper joins for quiz attempts
     base_query = QuizAttempt.query\
         .join(Quiz)\
         .join(Quiz.curriculum)\
@@ -21,7 +26,6 @@ def index():
     
     if current_user.is_teacher:
         if selected_student_id:
-            # Get attempts for a specific student with validation
             student = Student.query.filter_by(
                 id=selected_student_id,
                 teacher_id=current_user.id
@@ -32,12 +36,10 @@ def index():
                 Student.teacher_id == current_user.id
             ).order_by(QuizAttempt.completed_at.desc()).all()
         else:
-            # Get all attempts from teacher's students
             attempts = base_query.filter(
                 Student.teacher_id == current_user.id
             ).order_by(QuizAttempt.completed_at.desc()).all()
     else:
-        # Student viewing their own attempts
         student = Student.query.filter_by(email=current_user.email).first()
         if not student:
             flash('Öğrenci profili bulunamadı.', 'error')
@@ -47,7 +49,6 @@ def index():
             QuizAttempt.student_id == student.id
         ).order_by(QuizAttempt.completed_at.desc()).all()
     
-    # Calculate overall statistics with proper error handling
     total_quizzes = len(attempts)
     if total_quizzes > 0:
         scores = [attempt.score for attempt in attempts if attempt.score is not None]
@@ -61,7 +62,6 @@ def index():
             highest_score = max(scores)
             lowest_score = min(scores)
             
-            # Calculate improvement trend
             if len(scores) >= 2:
                 recent_avg = statistics.mean(scores[:5]) if len(scores) >= 5 else statistics.mean(scores)
                 older_avg = statistics.mean(scores[-5:]) if len(scores) >= 5 else scores[-1]
@@ -69,13 +69,11 @@ def index():
             else:
                 improvement_rate = 0
             
-            # Calculate performance quartiles
             quartiles = statistics.quantiles(scores)
         else:
             average_score = median_score = std_dev = highest_score = lowest_score = improvement_rate = 0
             quartiles = [0, 0, 0]
         
-        # Get recent trend with proper student information and error handling
         recent_trend = []
         trend_scores = []
         for attempt in sorted(attempts, key=lambda x: x.completed_at, reverse=True)[:10]:
@@ -98,7 +96,6 @@ def index():
         quartiles = [0, 0, 0]
         recent_trend = []
     
-    # Calculate curriculum-wise performance with error handling
     curriculum_performance = {}
     for attempt in attempts:
         try:
@@ -127,7 +124,6 @@ def index():
         except AttributeError:
             continue
     
-    # Calculate advanced statistics for each curriculum
     for curr_title, curr_data in curriculum_performance.items():
         if curr_data['attempts'] > 0:
             scores = curr_data['scores']
@@ -142,7 +138,6 @@ def index():
             curr_data['recent_scores'].sort(key=lambda x: x['date'], reverse=True)
             curr_data['recent_scores'] = curr_data['recent_scores'][:5]
             
-            # Calculate improvement trend
             if len(scores) >= 2:
                 recent_avg = statistics.mean(scores[:5]) if len(scores) >= 5 else statistics.mean(scores)
                 older_avg = statistics.mean(scores[-5:]) if len(scores) >= 5 else scores[-1]
@@ -150,7 +145,6 @@ def index():
             else:
                 curr_data['improvement_rate'] = 0
     
-    # Get student list and performance data for teachers
     students = []
     student_performance = {}
     if current_user.is_teacher:
@@ -178,13 +172,11 @@ def index():
                     recent_score = student_attempts[0].score
                     improvement = recent_score - student_attempts[-1].score if len(valid_scores) > 1 else 0
                     
-                    # Calculate weekly progress
                     week_ago = datetime.utcnow() - timedelta(days=7)
                     recent_attempts = [a.score for a in student_attempts 
                                     if a.completed_at >= week_ago and a.score is not None]
                     weekly_progress = statistics.mean(recent_attempts) if recent_attempts else 0
                     
-                    # Calculate relative performance
                     class_avg = average_score
                     performance_percentile = (
                         len([s for s in scores if s < avg_score]) / len(scores) * 100
@@ -206,7 +198,6 @@ def index():
                 'performance_percentile': performance_percentile
             }
     
-    # Calculate class-wide performance metrics for teachers
     class_performance = None
     if current_user.is_teacher:
         total_class_attempts = QuizAttempt.query\
@@ -288,7 +279,6 @@ def performance_trends():
     period = request.args.get('period', 'week')
     student_id = request.args.get('student_id', type=int)
     
-    # Calculate date range based on period
     end_date = datetime.utcnow()
     if period == 'week':
         start_date = end_date - timedelta(days=7)
@@ -303,7 +293,6 @@ def performance_trends():
         date_format = '%Y-%m'
         date_extract = func.date_trunc('month', QuizAttempt.completed_at)
     
-    # Build base query with proper joins
     base_query = QuizAttempt.query\
         .join(Quiz)\
         .join(Quiz.curriculum)\
@@ -312,7 +301,6 @@ def performance_trends():
     
     if current_user.is_teacher:
         if student_id:
-            # Verify student belongs to teacher
             student = Student.query.filter_by(id=student_id, teacher_id=current_user.id).first_or_404()
             base_query = base_query.filter(
                 QuizAttempt.student_id == student.id,
@@ -327,7 +315,6 @@ def performance_trends():
         else:
             return jsonify({period: []})
     
-    # Get attempts grouped by date
     attempts_by_date = base_query\
         .with_entities(
             date_extract.label('date'),
@@ -338,7 +325,6 @@ def performance_trends():
         .order_by('date')\
         .all()
     
-    # Format data for charts with error handling
     trend_data = []
     for date, avg_score, attempt_count in attempts_by_date:
         try:
@@ -351,3 +337,144 @@ def performance_trends():
             continue
     
     return jsonify({period: trend_data})
+
+@analytics_bp.route('/analytics/export/csv')
+@login_required
+def export_csv():
+    selected_student_id = request.args.get('student_id', type=int)
+    
+    base_query = QuizAttempt.query\
+        .join(Quiz)\
+        .join(Quiz.curriculum)\
+        .join(Student, QuizAttempt.student_id == Student.id)
+    
+    if current_user.is_teacher:
+        if selected_student_id:
+            student = Student.query.filter_by(id=selected_student_id, teacher_id=current_user.id).first_or_404()
+            attempts = base_query.filter(
+                QuizAttempt.student_id == student.id,
+                Student.teacher_id == current_user.id
+            ).order_by(QuizAttempt.completed_at.desc()).all()
+            filename = f"performance_report_{student.name}_{datetime.now().strftime('%Y%m%d')}.csv"
+        else:
+            attempts = base_query.filter(
+                Student.teacher_id == current_user.id
+            ).order_by(QuizAttempt.completed_at.desc()).all()
+            filename = f"class_performance_report_{datetime.now().strftime('%Y%m%d')}.csv"
+    else:
+        student = Student.query.filter_by(email=current_user.email).first()
+        if not student:
+            flash('Öğrenci profili bulunamadı.', 'error')
+            return redirect(url_for('dashboard.index'))
+            
+        attempts = base_query.filter(
+            QuizAttempt.student_id == student.id
+        ).order_by(QuizAttempt.completed_at.desc()).all()
+        filename = f"my_performance_report_{datetime.now().strftime('%Y%m%d')}.csv"
+    
+    data = []
+    for attempt in attempts:
+        data.append({
+            'Student': attempt.student_profile.name,
+            'Quiz': attempt.quiz.title,
+            'Curriculum': attempt.quiz.curriculum.title,
+            'Score': f"{attempt.score:.1f}%",
+            'Date': attempt.completed_at.strftime('%Y-%m-%d %H:%M'),
+        })
+    
+    df = pd.DataFrame(data)
+    output = io.StringIO()
+    df.to_csv(output, index=False, encoding='utf-8')
+    output.seek(0)
+    
+    return send_file(
+        io.BytesIO(output.getvalue().encode('utf-8')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=filename
+    )
+
+@analytics_bp.route('/analytics/export/pdf')
+@login_required
+def export_pdf():
+    selected_student_id = request.args.get('student_id', type=int)
+    
+    base_query = QuizAttempt.query\
+        .join(Quiz)\
+        .join(Quiz.curriculum)\
+        .join(Student, QuizAttempt.student_id == Student.id)
+    
+    if current_user.is_teacher:
+        if selected_student_id:
+            student = Student.query.filter_by(id=selected_student_id, teacher_id=current_user.id).first_or_404()
+            attempts = base_query.filter(
+                QuizAttempt.student_id == student.id,
+                Student.teacher_id == current_user.id
+            ).order_by(QuizAttempt.completed_at.desc()).all()
+            filename = f"performance_report_{student.name}_{datetime.now().strftime('%Y%m%d')}.pdf"
+            title = f"Performance Report - {student.name}"
+        else:
+            attempts = base_query.filter(
+                Student.teacher_id == current_user.id
+            ).order_by(QuizAttempt.completed_at.desc()).all()
+            filename = f"class_performance_report_{datetime.now().strftime('%Y%m%d')}.pdf"
+            title = "Class Performance Report"
+    else:
+        student = Student.query.filter_by(email=current_user.email).first()
+        if not student:
+            flash('Öğrenci profili bulunamadı.', 'error')
+            return redirect(url_for('dashboard.index'))
+            
+        attempts = base_query.filter(
+            QuizAttempt.student_id == student.id
+        ).order_by(QuizAttempt.completed_at.desc()).all()
+        filename = f"my_performance_report_{datetime.now().strftime('%Y%m%d')}.pdf"
+        title = "My Performance Report"
+    
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    styles = getSampleStyleSheet()
+    story = []
+    
+    story.append(Paragraph(title, styles['Heading1']))
+    story.append(Spacer(1, 12))
+    
+    story.append(Paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles['Normal']))
+    story.append(Spacer(1, 12))
+    
+    data = [['Student', 'Quiz', 'Curriculum', 'Score', 'Date']]
+    for attempt in attempts:
+        data.append([
+            attempt.student_profile.name,
+            attempt.quiz.title,
+            attempt.quiz.curriculum.title,
+            f"{attempt.score:.1f}%",
+            attempt.completed_at.strftime('%Y-%m-%d %H:%M')
+        ])
+    
+    table = Table(data)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 12),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    story.append(table)
+    
+    doc.build(story)
+    buffer.seek(0)
+    
+    return send_file(
+        buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=filename
+    )
