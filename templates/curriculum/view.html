@@ -31,13 +31,31 @@
         <div class="col-md-4">
             <div class="card mb-4">
                 <div class="card-body">
-                    <h5 class="card-title">Available Quizzes</h5>
+                    <h5 class="card-title">{% if current_user.is_teacher %}Available{% else %}Assigned{% endif %} Quizzes</h5>
                     <div class="list-group">
-                        {% for quiz in curriculum.quizzes %}
-                        <a href="{{ url_for('quiz.take', id=quiz.id) }}" class="list-group-item list-group-item-action">
-                            {{ quiz.title }}
-                        </a>
-                        {% endfor %}
+                        {% if current_user.is_teacher %}
+                            {% for quiz in curriculum.quizzes %}
+                                <a href="{{ url_for('quiz.take', id=quiz.id) }}" class="list-group-item list-group-item-action">
+                                    {{ quiz.title }}
+                                </a>
+                            {% endfor %}
+                            {% if not curriculum.quizzes %}
+                                <div class="alert alert-info">
+                                    No quizzes available. Create a new quiz to get started.
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            {% for quiz in assigned_quizzes %}
+                                <a href="{{ url_for('quiz.take', id=quiz.id) }}" class="list-group-item list-group-item-action">
+                                    {{ quiz.title }}
+                                </a>
+                            {% endfor %}
+                            {% if not assigned_quizzes %}
+                                <div class="alert alert-info">
+                                    No quizzes assigned yet.
+                                </div>
+                            {% endif %}
+                        {% endif %}
                     </div>
                 </div>
             </div>

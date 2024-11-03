@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from functools import wraps
-from models import Curriculum, db
+from models import Curriculum, db, Student, Quiz, QuizAssignment
 from ai_service import generate_curriculum_content, AIServiceError
 
 curriculum_bp = Blueprint('curriculum', __name__)
@@ -67,7 +67,18 @@ def list():
 @login_required
 def view(id):
     curriculum = Curriculum.query.get_or_404(id)
-    return render_template('curriculum/view.html', curriculum=curriculum)
+    assigned_quizzes = curriculum.quizzes
+    
+    if not current_user.is_teacher:
+        student = Student.query.filter_by(email=current_user.email).first()
+        if student:
+            assigned_quizzes = Quiz.query.join(QuizAssignment).filter(
+                Quiz.curriculum_id == curriculum.id,
+                QuizAssignment.student_id == student.id,
+                QuizAssignment.completed == False
+            ).all()
+            
+    return render_template('curriculum/view.html', curriculum=curriculum, assigned_quizzes=assigned_quizzes)
 
 @curriculum_bp.route('/curriculum/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
