@@ -399,82 +399,142 @@ def export_csv():
 def export_pdf():
     selected_student_id = request.args.get('student_id', type=int)
     
-    base_query = QuizAttempt.query\
-        .join(Quiz)\
-        .join(Quiz.curriculum)\
-        .join(Student, QuizAttempt.student_id == Student.id)
-    
-    if current_user.is_teacher:
-        if selected_student_id:
+    try:
+        # Create PDF buffer
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        styles = getSampleStyleSheet()
+        elements = []
+        
+        # Custom style for Turkish characters
+        custom_style = ParagraphStyle(
+            'CustomStyle',
+            parent=styles['Normal'],
+            fontSize=12,
+            leading=16
+        )
+        
+        # Add title
+        if current_user.is_teacher and selected_student_id:
             student = Student.query.filter_by(id=selected_student_id, teacher_id=current_user.id).first_or_404()
-            attempts = base_query.filter(
-                QuizAttempt.student_id == student.id,
-                Student.teacher_id == current_user.id
-            ).order_by(QuizAttempt.completed_at.desc()).all()
-            filename = f"performance_report_{student.name}_{datetime.now().strftime('%Y%m%d')}.pdf"
-            title = f"Performance Report - {student.name}"
+            title = f"Performans Raporu - {student.name}"
         else:
+            title = "Sınıf Performans Raporu" if current_user.is_teacher else "Performans Raporum"
+        
+        elements.append(Paragraph(title, styles['Title']))
+        elements.append(Spacer(1, 20))
+        
+        # Query attempts
+        base_query = QuizAttempt.query\
+            .join(Quiz)\
+            .join(Quiz.curriculum)\
+            .join(Student, QuizAttempt.student_id == Student.id)
+        
+        if current_user.is_teacher:
+            if selected_student_id:
+                attempts = base_query.filter(
+                    QuizAttempt.student_id == selected_student_id,
+                    Student.teacher_id == current_user.id
+                ).order_by(QuizAttempt.completed_at.desc()).all()
+            else:
+                attempts = base_query.filter(
+                    Student.teacher_id == current_user.id
+                ).order_by(QuizAttempt.completed_at.desc()).all()
+        else:
+            student = Student.query.filter_by(email=current_user.email).first()
+            if not student:
+                flash('Öğrenci profili bulunamadı.', 'error')
+                return redirect(url_for('dashboard.index'))
+                
             attempts = base_query.filter(
-                Student.teacher_id == current_user.id
+                QuizAttempt.student_id == student.id
             ).order_by(QuizAttempt.completed_at.desc()).all()
-            filename = f"class_performance_report_{datetime.now().strftime('%Y%m%d')}.pdf"
-            title = "Class Performance Report"
-    else:
-        student = Student.query.filter_by(email=current_user.email).first()
-        if not student:
-            flash('Öğrenci profili bulunamadı.', 'error')
-            return redirect(url_for('dashboard.index'))
+        
+        # Calculate statistics
+        if attempts:
+            scores = [attempt.score for attempt in attempts]
+            avg_score = statistics.mean(scores)
+            median_score = statistics.median(scores)
+            try:
+                std_dev = statistics.stdev(scores)
+            except statistics.StatisticsError:
+                std_dev = 0
             
-        attempts = base_query.filter(
-            QuizAttempt.student_id == student.id
-        ).order_by(QuizAttempt.completed_at.desc()).all()
-        filename = f"my_performance_report_{datetime.now().strftime('%Y%m%d')}.pdf"
-        title = "My Performance Report"
-    
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
-    styles = getSampleStyleSheet()
-    story = []
-    
-    story.append(Paragraph(title, styles['Heading1']))
-    story.append(Spacer(1, 12))
-    
-    story.append(Paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles['Normal']))
-    story.append(Spacer(1, 12))
-    
-    data = [['Student', 'Quiz', 'Curriculum', 'Score', 'Date']]
-    for attempt in attempts:
-        data.append([
-            attempt.student_profile.name,
-            attempt.quiz.title,
-            attempt.quiz.curriculum.title,
-            f"{attempt.score:.1f}%",
-            attempt.completed_at.strftime('%Y-%m-%d %H:%M')
-        ])
-    
-    table = Table(data)
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 14),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 12),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
-    ]))
-    story.append(table)
-    
-    doc.build(story)
-    buffer.seek(0)
-    
-    return send_file(
-        buffer,
-        mimetype='application/pdf',
-        as_attachment=True,
-        download_name=filename
-    )
+            # Add statistics table
+            stats_data = [
+                ['İstatistik', 'Değer'],
+                ['Ortalama Puan', f'{avg_score:.1f}%'],
+                ['Medyan Puan', f'{median_score:.1f}%'],
+                ['Standart Sapma', f'{std_dev:.1f}'],
+                ['Quiz Sayısı', str(len(attempts))]
+            ]
+            
+            stats_table = Table(stats_data, colWidths=[200, 200])
+            stats_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 14),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 12),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            
+            elements.append(stats_table)
+            elements.append(Spacer(1, 20))
+            
+            # Add attempts table
+            attempts_data = [['Öğrenci', 'Quiz', 'Müfredat', 'Puan', 'Tarih']]
+            for attempt in attempts:
+                attempts_data.append([
+                    attempt.student_profile.name,
+                    attempt.quiz.title,
+                    attempt.quiz.curriculum.title,
+                    f"{attempt.score:.1f}%",
+                    attempt.completed_at.strftime('%Y-%m-%d %H:%M')
+                ])
+            
+            attempts_table = Table(attempts_data, colWidths=[100, 100, 100, 70, 100])
+            attempts_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 10),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            
+            elements.append(attempts_table)
+        else:
+            elements.append(Paragraph("Henüz quiz denemesi bulunmuyor.", custom_style))
+        
+        # Generate PDF
+        doc.build(elements)
+        buffer.seek(0)
+        
+        # Generate filename
+        if current_user.is_teacher and selected_student_id:
+            filename = f"performance_report_{student.name}_{datetime.now().strftime('%Y%m%d')}.pdf"
+        else:
+            filename = f"{'class' if current_user.is_teacher else 'my'}_performance_report_{datetime.now().strftime('%Y%m%d')}.pdf"
+        
+        return send_file(
+            buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        current_app.logger.error(f"PDF export error: {str(e)}")
+        flash('PDF raporu oluşturulurken bir hata oluştu.', 'error')
+        return redirect(url_for('analytics.index'))
