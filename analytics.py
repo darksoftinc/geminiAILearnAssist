@@ -1,8 +1,10 @@
+# Add new imports for advanced analytics
 from flask import Blueprint, render_template, jsonify, request, flash, redirect, url_for
 from flask_login import login_required, current_user
 from models import User, QuizAttempt, Quiz, Curriculum, Student, db
-from sqlalchemy import func, desc, and_, extract
+from sqlalchemy import func, desc, and_, extract, case
 from datetime import datetime, timedelta
+import statistics
 
 analytics_bp = Blueprint('analytics', __name__)
 
@@ -50,28 +52,50 @@ def index():
     if total_quizzes > 0:
         scores = [attempt.score for attempt in attempts if attempt.score is not None]
         if scores:
-            average_score = sum(scores) / len(scores)
+            average_score = statistics.mean(scores)
+            median_score = statistics.median(scores)
+            try:
+                std_dev = statistics.stdev(scores)
+            except statistics.StatisticsError:
+                std_dev = 0
             highest_score = max(scores)
             lowest_score = min(scores)
+            
+            # Calculate improvement trend
+            if len(scores) >= 2:
+                recent_avg = statistics.mean(scores[:5]) if len(scores) >= 5 else statistics.mean(scores)
+                older_avg = statistics.mean(scores[-5:]) if len(scores) >= 5 else scores[-1]
+                improvement_rate = ((recent_avg - older_avg) / older_avg) * 100
+            else:
+                improvement_rate = 0
+            
+            # Calculate performance quartiles
+            quartiles = statistics.quantiles(scores)
         else:
-            average_score = highest_score = lowest_score = 0.0
+            average_score = median_score = std_dev = highest_score = lowest_score = improvement_rate = 0
+            quartiles = [0, 0, 0]
         
         # Get recent trend with proper student information and error handling
         recent_trend = []
+        trend_scores = []
         for attempt in sorted(attempts, key=lambda x: x.completed_at, reverse=True)[:10]:
             try:
+                score = attempt.score
+                trend_scores.append(score)
                 trend_data = {
                     'date': attempt.completed_at.strftime('%Y-%m-%d'),
-                    'score': attempt.score,
+                    'score': score,
                     'quiz': attempt.quiz.title,
                     'student': attempt.student_profile.name if attempt.student_profile else 'Unknown',
-                    'curriculum': attempt.quiz.curriculum.title
+                    'curriculum': attempt.quiz.curriculum.title,
+                    'moving_average': statistics.mean(trend_scores) if trend_scores else 0
                 }
                 recent_trend.append(trend_data)
             except AttributeError:
                 continue
     else:
-        average_score = highest_score = lowest_score = 0.0
+        average_score = median_score = std_dev = highest_score = lowest_score = improvement_rate = 0
+        quartiles = [0, 0, 0]
         recent_trend = []
     
     # Calculate curriculum-wise performance with error handling
@@ -85,6 +109,7 @@ def index():
                     'total_score': 0,
                     'average': 0,
                     'student_count': set(),
+                    'scores': [],
                     'recent_scores': []
                 }
             
@@ -92,6 +117,7 @@ def index():
                 curr_perf = curriculum_performance[curriculum.title]
                 curr_perf['attempts'] += 1
                 curr_perf['total_score'] += attempt.score
+                curr_perf['scores'].append(attempt.score)
                 if attempt.student_id:
                     curr_perf['student_count'].add(attempt.student_id)
                 curr_perf['recent_scores'].append({
@@ -101,13 +127,28 @@ def index():
         except AttributeError:
             continue
     
-    # Calculate averages and prepare final curriculum data
+    # Calculate advanced statistics for each curriculum
     for curr_title, curr_data in curriculum_performance.items():
         if curr_data['attempts'] > 0:
-            curr_data['average'] = curr_data['total_score'] / curr_data['attempts']
-        curr_data['student_count'] = len(curr_data['student_count'])
-        curr_data['recent_scores'].sort(key=lambda x: x['date'], reverse=True)
-        curr_data['recent_scores'] = curr_data['recent_scores'][:5]
+            scores = curr_data['scores']
+            curr_data['average'] = statistics.mean(scores)
+            curr_data['median'] = statistics.median(scores)
+            try:
+                curr_data['std_dev'] = statistics.stdev(scores)
+            except statistics.StatisticsError:
+                curr_data['std_dev'] = 0
+            curr_data['quartiles'] = statistics.quantiles(scores) if len(scores) > 1 else [0, 0, 0]
+            curr_data['student_count'] = len(curr_data['student_count'])
+            curr_data['recent_scores'].sort(key=lambda x: x['date'], reverse=True)
+            curr_data['recent_scores'] = curr_data['recent_scores'][:5]
+            
+            # Calculate improvement trend
+            if len(scores) >= 2:
+                recent_avg = statistics.mean(scores[:5]) if len(scores) >= 5 else statistics.mean(scores)
+                older_avg = statistics.mean(scores[-5:]) if len(scores) >= 5 else scores[-1]
+                curr_data['improvement_rate'] = ((recent_avg - older_avg) / older_avg) * 100
+            else:
+                curr_data['improvement_rate'] = 0
     
     # Get student list and performance data for teachers
     students = []
@@ -128,7 +169,12 @@ def index():
             if student_attempts:
                 valid_scores = [a.score for a in student_attempts if a.score is not None]
                 if valid_scores:
-                    avg_score = sum(valid_scores) / len(valid_scores)
+                    avg_score = statistics.mean(valid_scores)
+                    median_score = statistics.median(valid_scores)
+                    try:
+                        std_dev = statistics.stdev(valid_scores)
+                    except statistics.StatisticsError:
+                        std_dev = 0
                     recent_score = student_attempts[0].score
                     improvement = recent_score - student_attempts[-1].score if len(valid_scores) > 1 else 0
                     
@@ -136,19 +182,28 @@ def index():
                     week_ago = datetime.utcnow() - timedelta(days=7)
                     recent_attempts = [a.score for a in student_attempts 
                                     if a.completed_at >= week_ago and a.score is not None]
-                    weekly_progress = sum(recent_attempts) / len(recent_attempts) if recent_attempts else 0
+                    weekly_progress = statistics.mean(recent_attempts) if recent_attempts else 0
+                    
+                    # Calculate relative performance
+                    class_avg = average_score
+                    performance_percentile = (
+                        len([s for s in scores if s < avg_score]) / len(scores) * 100
+                    ) if scores else 0
                 else:
-                    avg_score = recent_score = improvement = weekly_progress = 0
+                    avg_score = median_score = std_dev = recent_score = improvement = weekly_progress = performance_percentile = 0
             else:
-                avg_score = recent_score = improvement = weekly_progress = 0
+                avg_score = median_score = std_dev = recent_score = improvement = weekly_progress = performance_percentile = 0
             
             student_performance[student.id] = {
                 'name': student.name,
                 'average_score': avg_score,
+                'median_score': median_score,
+                'std_dev': std_dev,
                 'recent_score': recent_score,
                 'total_attempts': len(student_attempts),
                 'improvement': improvement,
-                'weekly_progress': weekly_progress
+                'weekly_progress': weekly_progress,
+                'performance_percentile': performance_percentile
             }
     
     # Calculate class-wide performance metrics for teachers
@@ -160,10 +215,26 @@ def index():
             .count()
         
         if total_class_attempts > 0:
-            class_avg = db.session.query(func.avg(QuizAttempt.score))\
+            class_scores = db.session.query(QuizAttempt.score)\
                 .join(Student)\
-                .filter(Student.teacher_id == current_user.id)\
-                .scalar() or 0
+                .filter(
+                    Student.teacher_id == current_user.id,
+                    QuizAttempt.score.isnot(None)
+                ).all()
+            
+            class_scores = [score[0] for score in class_scores]
+            
+            if class_scores:
+                class_avg = statistics.mean(class_scores)
+                class_median = statistics.median(class_scores)
+                try:
+                    class_std_dev = statistics.stdev(class_scores)
+                except statistics.StatisticsError:
+                    class_std_dev = 0
+                class_quartiles = statistics.quantiles(class_scores)
+            else:
+                class_avg = class_median = class_std_dev = 0
+                class_quartiles = [0, 0, 0]
             
             week_ago = datetime.utcnow() - timedelta(days=7)
             recent_completion = QuizAttempt.query\
@@ -177,13 +248,19 @@ def index():
                 'total_students': len(students),
                 'total_attempts': total_class_attempts,
                 'class_average': class_avg,
-                'recent_completion_rate': (recent_completion / total_class_attempts * 100)
+                'class_median': class_median,
+                'class_std_dev': class_std_dev,
+                'class_quartiles': class_quartiles,
+                'recent_completion_rate': (recent_completion / total_class_attempts * 100) if total_class_attempts > 0 else 0
             }
         else:
             class_performance = {
                 'total_students': len(students),
                 'total_attempts': 0,
                 'class_average': 0,
+                'class_median': 0,
+                'class_std_dev': 0,
+                'class_quartiles': [0, 0, 0],
                 'recent_completion_rate': 0
             }
     
@@ -191,8 +268,12 @@ def index():
         'analytics/index.html',
         total_quizzes=total_quizzes,
         average_score=average_score,
+        median_score=median_score,
+        std_dev=std_dev,
         highest_score=highest_score,
         lowest_score=lowest_score,
+        improvement_rate=improvement_rate,
+        quartiles=quartiles,
         recent_trend=recent_trend,
         curriculum_performance=curriculum_performance,
         students=students,

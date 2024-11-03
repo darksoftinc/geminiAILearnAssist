@@ -28,7 +28,7 @@
     </div>
     {% endif %}
     
-    <!-- Overview Cards -->
+    <!-- Performance Overview Cards -->
     <div class="row mb-4">
         <div class="col-md-3">
             <div class="card">
@@ -43,22 +43,50 @@
                 <div class="card-body">
                     <h5 class="card-title">Ortalama Puan</h5>
                     <h2 class="card-text">{{ "%.1f"|format(average_score) }}%</h2>
+                    <small class="text-muted">Medyan: {{ "%.1f"|format(median_score) }}%</small>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">En Yüksek Puan</h5>
-                    <h2 class="card-text">{{ "%.1f"|format(highest_score) }}%</h2>
+                    <h5 class="card-title">Gelişim Oranı</h5>
+                    <h2 class="card-text {% if improvement_rate >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        {{ "%.1f"|format(improvement_rate) }}%
+                    </h2>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">En Düşük Puan</h5>
-                    <h2 class="card-text">{{ "%.1f"|format(lowest_score) }}%</h2>
+                    <h5 class="card-title">Standart Sapma</h5>
+                    <h2 class="card-text">{{ "%.1f"|format(std_dev) }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistical Distribution -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Puan Dağılımı</h5>
+                    <div class="progress" style="height: 2rem;">
+                        <div class="progress-bar bg-danger" style="width: 25%" title="0-25%">
+                            0-{{ "%.1f"|format(quartiles[0]) }}%
+                        </div>
+                        <div class="progress-bar bg-warning" style="width: 25%" title="25-50%">
+                            {{ "%.1f"|format(quartiles[0]) }}-{{ "%.1f"|format(quartiles[1]) }}%
+                        </div>
+                        <div class="progress-bar bg-info" style="width: 25%" title="50-75%">
+                            {{ "%.1f"|format(quartiles[1]) }}-{{ "%.1f"|format(quartiles[2]) }}%
+                        </div>
+                        <div class="progress-bar bg-success" style="width: 25%" title="75-100%">
+                            {{ "%.1f"|format(quartiles[2]) }}-100%
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -83,6 +111,53 @@
         </div>
     </div>
 
+    {% if current_user.is_teacher and class_performance %}
+    <!-- Class Performance Overview -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Sınıf Performans Özeti</h5>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-subtitle mb-2 text-muted">Sınıf Ortalaması</h6>
+                                    <h3>{{ "%.1f"|format(class_performance.class_average) }}%</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-subtitle mb-2 text-muted">Medyan</h6>
+                                    <h3>{{ "%.1f"|format(class_performance.class_median) }}%</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-subtitle mb-2 text-muted">Standart Sapma</h6>
+                                    <h3>{{ "%.1f"|format(class_performance.class_std_dev) }}</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-subtitle mb-2 text-muted">Haftalık Tamamlama</h6>
+                                    <h3>{{ "%.1f"|format(class_performance.recent_completion_rate) }}%</h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     {% if current_user.is_teacher and not selected_student_id %}
     <!-- Student Performance Overview -->
     <div class="row mb-4">
@@ -95,11 +170,11 @@
                             <thead>
                                 <tr>
                                     <th>Öğrenci</th>
-                                    <th>Ortalama Puan</th>
-                                    <th>Son Quiz Puanı</th>
-                                    <th>Toplam Quiz</th>
-                                    <th>Haftalık İlerleme</th>
+                                    <th>Ortalama</th>
+                                    <th>Medyan</th>
+                                    <th>Son Quiz</th>
                                     <th>Gelişim</th>
+                                    <th>Yüzdelik</th>
                                     <th>Detaylar</th>
                                 </tr>
                             </thead>
@@ -109,9 +184,8 @@
                                 <tr>
                                     <td>{{ student.name }}</td>
                                     <td>{{ "%.1f"|format(performance.average_score) }}%</td>
+                                    <td>{{ "%.1f"|format(performance.median_score) }}%</td>
                                     <td>{{ "%.1f"|format(performance.recent_score) }}%</td>
-                                    <td>{{ performance.total_attempts }}</td>
-                                    <td>{{ "%.1f"|format(performance.weekly_progress) }}%</td>
                                     <td>
                                         {% if performance.improvement > 0 %}
                                         <span class="text-success">+{{ "%.1f"|format(performance.improvement) }}%</span>
@@ -119,6 +193,7 @@
                                         <span class="text-danger">{{ "%.1f"|format(performance.improvement) }}%</span>
                                         {% endif %}
                                     </td>
+                                    <td>{{ "%.1f"|format(performance.performance_percentile) }}%</td>
                                     <td>
                                         <a href="?student_id={{ student.id }}" class="btn btn-sm btn-outline-primary">
                                             Detaylar

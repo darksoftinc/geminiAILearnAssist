@@ -19,6 +19,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     borderColor: 'rgb(75, 192, 192)',
                     tension: 0.1,
                     fill: false
+                }, {
+                    label: 'Hareketli Ortalama',
+                    data: chartData.recentTrend?.map(item => item.moving_average) || [],
+                    borderColor: 'rgb(255, 159, 64)',
+                    borderDash: [5, 5],
+                    tension: 0.1,
+                    fill: false
                 }]
             },
             options: {
@@ -50,7 +57,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         intersect: false,
                         callbacks: {
                             label: function(context) {
-                                return `Puan: ${context.parsed.y.toFixed(1)}%`;
+                                const label = context.dataset.label || '';
+                                const value = context.parsed.y;
+                                return `${label}: ${value.toFixed(1)}%`;
                             }
                         }
                     }
@@ -61,30 +70,42 @@ document.addEventListener('DOMContentLoaded', function() {
         // Handle period selection for trends if buttons exist
         if (periodButtons && periodButtons.length > 0) {
             periodButtons.forEach(button => {
-                button?.addEventListener('click', function() {
-                    if (!this) return;
-                    
-                    periodButtons.forEach(btn => btn?.classList?.remove('active'));
-                    this.classList?.add('active');
-                    
-                    const studentId = studentSelect?.value || '';
-                    const period = this.dataset?.period;
-                    
-                    if (!period) return;
-                    
-                    fetch(`/analytics/performance_trends?period=${period}&student_id=${studentId}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data[period]) {
-                                trendsChart.data.labels = data[period].map(item => item.date);
-                                trendsChart.data.datasets[0].data = data[period].map(item => item.score);
-                                trendsChart.update();
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error fetching performance trends:', error);
+                if (button) {
+                    button.addEventListener('click', function() {
+                        if (!this) return;
+                        
+                        periodButtons.forEach(btn => {
+                            if (btn) btn.classList.remove('active');
                         });
-                });
+                        this.classList.add('active');
+                        
+                        const studentId = studentSelect?.value || '';
+                        const period = this.dataset.period;
+                        
+                        if (!period) return;
+                        
+                        fetch(`/analytics/performance_trends?period=${period}&student_id=${studentId}`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data[period]) {
+                                    // Calculate moving average for the new data
+                                    const scores = data[period].map(item => item.score);
+                                    const movingAverages = scores.map((_, index) => {
+                                        const slice = scores.slice(Math.max(0, index - 2), index + 1);
+                                        return slice.reduce((a, b) => a + b, 0) / slice.length;
+                                    });
+
+                                    trendsChart.data.labels = data[period].map(item => item.date);
+                                    trendsChart.data.datasets[0].data = scores;
+                                    trendsChart.data.datasets[1].data = movingAverages;
+                                    trendsChart.update();
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error fetching performance trends:', error);
+                            });
+                    });
+                }
             });
         }
     }
@@ -104,6 +125,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     backgroundColor: 'rgba(75, 192, 192, 0.2)',
                     borderColor: 'rgb(75, 192, 192)',
                     borderWidth: 1
+                }, {
+                    label: 'Medyan Puan',
+                    data: Object.values(curriculumData).map(item => item?.median || 0),
+                    backgroundColor: 'rgba(255, 159, 64, 0.2)',
+                    borderColor: 'rgb(255, 159, 64)',
+                    borderWidth: 1
                 }]
             },
             options: {
@@ -115,7 +142,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         max: 100,
                         title: {
                             display: true,
-                            text: 'Ortalama Puan (%)'
+                            text: 'Puan (%)'
                         }
                     }
                 },
@@ -128,10 +155,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         callbacks: {
                             label: function(context) {
                                 const curriculum = curriculumData[context.label] || {};
+                                const label = context.dataset.label || '';
                                 return [
-                                    `Ortalama: ${context.parsed.y.toFixed(1)}%`,
+                                    `${label}: ${context.parsed.y.toFixed(1)}%`,
+                                    `Standart Sapma: ${curriculum.std_dev?.toFixed(1) || 0}`,
                                     `Toplam Deneme: ${curriculum.attempts || 0}`,
-                                    `Öğrenci Sayısı: ${curriculum.student_count || 0}`
+                                    `Öğrenci Sayısı: ${curriculum.student_count || 0}`,
+                                    `Gelişim Oranı: ${curriculum.improvement_rate?.toFixed(1) || 0}%`
                                 ];
                             }
                         }
