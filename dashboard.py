@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template
 from flask_login import login_required, current_user
-from models import Curriculum, Student, QuizAttempt, QuizAssignment
+from models import Curriculum, Student, QuizAttempt, QuizAssignment, Quiz
 from sqlalchemy import desc, and_
 
 dashboard_bp = Blueprint('dashboard', __name__)
