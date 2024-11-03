@@ -96,7 +96,7 @@ def take(id):
     quiz = Quiz.query.get_or_404(id)
     
     # Get student profile for the current user
-    student = None if current_user.is_teacher else Student.query.filter_by(email=current_user.email).first()
+    student = Student.query.filter_by(email=current_user.email).first() if not current_user.is_teacher else None
     
     # Check if the student is assigned to this quiz
     if student:
@@ -122,8 +122,8 @@ def take(id):
             attempt = QuizAttempt(
                 user_id=current_user.id,
                 quiz_id=quiz.id,
-                student_id=student.id if student else None,
-                score=final_score
+                student_id=student.id if student else None,  # Set student_id correctly
+                score=final_score,
             )
             db.session.add(attempt)
             
@@ -133,7 +133,7 @@ def take(id):
             
             db.session.commit()
             
-            # Emit real-time notification with proper student info
+            # Emit real-time notification
             emit_quiz_completion(attempt)
             
             flash(f'Quiz tamamlandı! Puanınız: {final_score:.1f}%', 'success')

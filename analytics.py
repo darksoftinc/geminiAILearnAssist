@@ -14,28 +14,33 @@ def index():
     # Base query with all necessary joins
     base_query = QuizAttempt.query\
         .join(Quiz)\
-        .join(Quiz.curriculum)\
-        .join(User, QuizAttempt.user_id == User.id)
+        .join(Quiz.curriculum)
     
     if current_user.is_teacher:
         if selected_student_id:
             # Get attempts for a specific student with validation
             student = Student.query.filter_by(id=selected_student_id, teacher_id=current_user.id).first_or_404()
-            attempts = base_query.filter(
-                QuizAttempt.student_id == student.id
-            ).order_by(QuizAttempt.completed_at.desc()).all()
+            attempts = base_query\
+                .join(Student)\
+                .filter(
+                    QuizAttempt.student_id == student.id,
+                    Student.teacher_id == current_user.id
+                ).order_by(QuizAttempt.completed_at.desc()).all()
         else:
             # Get all attempts from teacher's students
             attempts = base_query\
-                .join(Student, QuizAttempt.student_id == Student.id)\
+                .join(Student)\
                 .filter(Student.teacher_id == current_user.id)\
                 .order_by(QuizAttempt.completed_at.desc()).all()
     else:
         # Student viewing their own attempts
         student = Student.query.filter_by(email=current_user.email).first()
+        if not student:
+            flash('Öğrenci profili bulunamadı.', 'error')
+            return redirect(url_for('dashboard.index'))
+            
         attempts = base_query.filter(
-            QuizAttempt.user_id == current_user.id,
-            QuizAttempt.student_id == student.id if student else None
+            QuizAttempt.student_id == student.id
         ).order_by(QuizAttempt.completed_at.desc()).all()
     
     # Calculate overall statistics
@@ -51,7 +56,7 @@ def index():
                 'date': attempt.completed_at.strftime('%Y-%m-%d'),
                 'score': attempt.score,
                 'quiz': attempt.quiz.title,
-                'student': attempt.student_profile.name if attempt.student_profile else current_user.username,
+                'student': attempt.student.name if attempt.student else current_user.username,
                 'curriculum': attempt.quiz.curriculum.title
             }
             for attempt in sorted(attempts, key=lambda x: x.completed_at, reverse=True)[:10]
@@ -131,26 +136,33 @@ def index():
             .filter(Student.teacher_id == current_user.id)\
             .count()
         
-        class_avg = QuizAttempt.query\
-            .join(Student)\
-            .filter(Student.teacher_id == current_user.id)\
-            .with_entities(func.avg(QuizAttempt.score))\
-            .scalar() or 0
-        
-        week_ago = datetime.utcnow() - timedelta(days=7)
-        recent_completion = QuizAttempt.query\
-            .join(Student)\
-            .filter(
-                Student.teacher_id == current_user.id,
-                QuizAttempt.completed_at >= week_ago
-            ).count()
-        
-        class_performance = {
-            'total_students': len(students),
-            'total_attempts': total_class_attempts,
-            'class_average': class_avg,
-            'recent_completion_rate': (recent_completion / total_class_attempts * 100) if total_class_attempts > 0 else 0
-        }
+        if total_class_attempts > 0:
+            class_avg = db.session.query(func.avg(QuizAttempt.score))\
+                .join(Student)\
+                .filter(Student.teacher_id == current_user.id)\
+                .scalar() or 0
+            
+            week_ago = datetime.utcnow() - timedelta(days=7)
+            recent_completion = QuizAttempt.query\
+                .join(Student)\
+                .filter(
+                    Student.teacher_id == current_user.id,
+                    QuizAttempt.completed_at >= week_ago
+                ).count()
+            
+            class_performance = {
+                'total_students': len(students),
+                'total_attempts': total_class_attempts,
+                'class_average': class_avg,
+                'recent_completion_rate': (recent_completion / total_class_attempts * 100)
+            }
+        else:
+            class_performance = {
+                'total_students': len(students),
+                'total_attempts': 0,
+                'class_average': 0,
+                'recent_completion_rate': 0
+            }
     
     return render_template(
         'analytics/index.html',
@@ -197,17 +209,22 @@ def performance_trends():
         if student_id:
             # Verify student belongs to teacher
             student = Student.query.filter_by(id=student_id, teacher_id=current_user.id).first_or_404()
-            base_query = base_query.filter(QuizAttempt.student_id == student_id)
+            base_query = base_query\
+                .join(Student)\
+                .filter(
+                    QuizAttempt.student_id == student.id,
+                    Student.teacher_id == current_user.id
+                )
         else:
             base_query = base_query\
                 .join(Student)\
                 .filter(Student.teacher_id == current_user.id)
     else:
         student = Student.query.filter_by(email=current_user.email).first()
-        base_query = base_query.filter(
-            QuizAttempt.user_id == current_user.id,
-            QuizAttempt.student_id == student.id if student else None
-        )
+        if student:
+            base_query = base_query.filter(QuizAttempt.student_id == student.id)
+        else:
+            return jsonify({period: []})
     
     # Get attempts grouped by date
     attempts_by_date = base_query\
