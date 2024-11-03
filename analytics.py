@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, jsonify, request, flash, redirect, url_for
 from flask_login import login_required, current_user
 from models import User, QuizAttempt, Quiz, Curriculum, Student
-from sqlalchemy import func, desc, and_
+from sqlalchemy import func, desc, and_, extract
 from datetime import datetime, timedelta
 
 analytics_bp = Blueprint('analytics', __name__)
@@ -11,37 +11,39 @@ analytics_bp = Blueprint('analytics', __name__)
 def index():
     selected_student_id = request.args.get('student_id', type=int)
     
-    # Get user's quiz attempts with proper joins
-    base_query = QuizAttempt.query.join(Quiz).join(Quiz.curriculum)
+    # Base query with all necessary joins
+    base_query = QuizAttempt.query\
+        .join(Quiz)\
+        .join(Quiz.curriculum)\
+        .join(User, QuizAttempt.user_id == User.id)
     
     if current_user.is_teacher:
         if selected_student_id:
-            # Get attempts for a specific student
-            student = Student.query.get_or_404(selected_student_id)
-            if student.teacher_id != current_user.id:
-                flash('Bu öğrencinin verilerine erişim yetkiniz yok.', 'error')
-                return redirect(url_for('dashboard.index'))
+            # Get attempts for a specific student with validation
+            student = Student.query.filter_by(id=selected_student_id, teacher_id=current_user.id).first_or_404()
             attempts = base_query.filter(
-                QuizAttempt.student_id == selected_student_id,
-                QuizAttempt.student_id.isnot(None)
+                QuizAttempt.student_id == student.id
             ).order_by(QuizAttempt.completed_at.desc()).all()
         else:
-            # Get all students' attempts for this teacher
-            attempts = base_query.join(Student).filter(
-                Student.teacher_id == current_user.id,
-                QuizAttempt.student_id.isnot(None)
-            ).order_by(QuizAttempt.completed_at.desc()).all()
+            # Get all attempts from teacher's students
+            attempts = base_query\
+                .join(Student, QuizAttempt.student_id == Student.id)\
+                .filter(Student.teacher_id == current_user.id)\
+                .order_by(QuizAttempt.completed_at.desc()).all()
     else:
-        # Get attempts for regular user/student
-        attempts = base_query.filter_by(user_id=current_user.id).order_by(
-            QuizAttempt.completed_at.desc()
-        ).all()
+        # Student viewing their own attempts
+        student = Student.query.filter_by(email=current_user.email).first()
+        attempts = base_query.filter(
+            QuizAttempt.user_id == current_user.id,
+            QuizAttempt.student_id == student.id if student else None
+        ).order_by(QuizAttempt.completed_at.desc()).all()
     
     # Calculate overall statistics
     total_quizzes = len(attempts)
     if total_quizzes > 0:
         average_score = sum(attempt.score for attempt in attempts) / total_quizzes
-        highest_score = max((attempt.score for attempt in attempts), default=0)
+        highest_score = max(attempt.score for attempt in attempts)
+        lowest_score = min(attempt.score for attempt in attempts)
         
         # Get recent trend with proper student information
         recent_trend = [
@@ -52,14 +54,13 @@ def index():
                 'student': attempt.student_profile.name if attempt.student_profile else current_user.username,
                 'curriculum': attempt.quiz.curriculum.title
             }
-            for attempt in sorted(attempts, key=lambda x: x.completed_at, reverse=True)[:5]
+            for attempt in sorted(attempts, key=lambda x: x.completed_at, reverse=True)[:10]
         ]
     else:
-        average_score = 0
-        highest_score = 0
+        average_score = highest_score = lowest_score = 0
         recent_trend = []
-
-    # Get curriculum-wise performance with proper filtering
+    
+    # Calculate curriculum-wise performance
     curriculum_performance = {}
     for attempt in attempts:
         curriculum = attempt.quiz.curriculum
@@ -68,90 +69,95 @@ def index():
                 'attempts': 0,
                 'total_score': 0,
                 'average': 0,
-                'student_count': set()
+                'student_count': set(),
+                'recent_scores': []
             }
-        curriculum_performance[curriculum.title]['attempts'] += 1
-        curriculum_performance[curriculum.title]['total_score'] += attempt.score
+        
+        curr_perf = curriculum_performance[curriculum.title]
+        curr_perf['attempts'] += 1
+        curr_perf['total_score'] += attempt.score
         if attempt.student_id:
-            curriculum_performance[curriculum.title]['student_count'].add(attempt.student_id)
+            curr_perf['student_count'].add(attempt.student_id)
+        curr_perf['recent_scores'].append({
+            'date': attempt.completed_at.strftime('%Y-%m-%d'),
+            'score': attempt.score
+        })
     
-    # Calculate averages and convert student_count to length
-    for curriculum in curriculum_performance.values():
-        curriculum['average'] = curriculum['total_score'] / curriculum['attempts']
-        curriculum['student_count'] = len(curriculum['student_count'])
-
+    # Calculate averages and prepare final curriculum data
+    for curr_title, curr_data in curriculum_performance.items():
+        curr_data['average'] = curr_data['total_score'] / curr_data['attempts']
+        curr_data['student_count'] = len(curr_data['student_count'])
+        curr_data['recent_scores'].sort(key=lambda x: x['date'], reverse=True)
+        curr_data['recent_scores'] = curr_data['recent_scores'][:5]  # Keep only recent 5 scores
+    
     # Get student list and performance data for teachers
     students = []
     student_performance = {}
     if current_user.is_teacher:
         students = Student.query.filter_by(teacher_id=current_user.id).all()
         
-        # Calculate detailed performance metrics for each student
         for student in students:
-            student_attempts = QuizAttempt.query.filter_by(
-                student_id=student.id
-            ).order_by(QuizAttempt.completed_at.desc()).all()
+            student_attempts = QuizAttempt.query\
+                .filter_by(student_id=student.id)\
+                .order_by(QuizAttempt.completed_at.desc())\
+                .all()
             
             if student_attempts:
                 avg_score = sum(a.score for a in student_attempts) / len(student_attempts)
-                recent_score = student_attempts[0].score if student_attempts else 0
-                improvement = recent_score - min(a.score for a in student_attempts) if len(student_attempts) > 1 else 0
+                recent_score = student_attempts[0].score
+                improvement = recent_score - student_attempts[-1].score if len(student_attempts) > 1 else 0
                 
-                # Calculate curriculum-specific performance
-                curriculum_scores = {}
-                for attempt in student_attempts:
-                    curr_title = attempt.quiz.curriculum.title
-                    if curr_title not in curriculum_scores:
-                        curriculum_scores[curr_title] = {'total': 0, 'count': 0}
-                    curriculum_scores[curr_title]['total'] += attempt.score
-                    curriculum_scores[curr_title]['count'] += 1
+                # Calculate weekly progress
+                week_ago = datetime.utcnow() - timedelta(days=7)
+                recent_attempts = [a for a in student_attempts if a.completed_at >= week_ago]
+                weekly_progress = sum(a.score for a in recent_attempts) / len(recent_attempts) if recent_attempts else 0
             else:
-                avg_score = 0
-                recent_score = 0
-                improvement = 0
-                curriculum_scores = {}
-                
+                avg_score = recent_score = improvement = weekly_progress = 0
+            
             student_performance[student.id] = {
                 'name': student.name,
                 'average_score': avg_score,
                 'recent_score': recent_score,
                 'total_attempts': len(student_attempts),
                 'improvement': improvement,
-                'curriculum_scores': {
-                    k: v['total'] / v['count'] 
-                    for k, v in curriculum_scores.items()
-                } if curriculum_scores else {}
+                'weekly_progress': weekly_progress
             }
-
-    # Calculate class performance metrics
+    
+    # Calculate class-wide performance metrics
     class_performance = None
     if current_user.is_teacher:
-        # Get overall class statistics with proper joins
-        class_attempts = QuizAttempt.query\
+        total_class_attempts = QuizAttempt.query\
+            .join(Student)\
+            .filter(Student.teacher_id == current_user.id)\
+            .count()
+        
+        class_avg = QuizAttempt.query\
+            .join(Student)\
+            .filter(Student.teacher_id == current_user.id)\
+            .with_entities(func.avg(QuizAttempt.score))\
+            .scalar() or 0
+        
+        week_ago = datetime.utcnow() - timedelta(days=7)
+        recent_completion = QuizAttempt.query\
             .join(Student)\
             .filter(
                 Student.teacher_id == current_user.id,
-                QuizAttempt.student_id.isnot(None)
-            )
+                QuizAttempt.completed_at >= week_ago
+            ).count()
         
-        total_class_attempts = class_attempts.count()
         class_performance = {
             'total_students': len(students),
             'total_attempts': total_class_attempts,
-            'class_average': class_attempts.with_entities(
-                func.avg(QuizAttempt.score).label('average')
-            ).scalar() or 0,
-            'recent_completion_rate': len([
-                a for a in attempts 
-                if a.completed_at >= datetime.utcnow() - timedelta(days=7)
-            ]) / max(len(attempts), 1) * 100 if attempts else 0
+            'class_average': class_avg,
+            'recent_completion_rate': (recent_completion / total_class_attempts * 100) if total_class_attempts > 0 else 0
         }
-
+    
     return render_template(
         'analytics/index.html',
         total_quizzes=total_quizzes,
         average_score=average_score,
         highest_score=highest_score,
+        lowest_score=lowest_score,
         recent_trend=recent_trend,
         curriculum_performance=curriculum_performance,
         students=students,
@@ -170,42 +176,58 @@ def performance_trends():
     end_date = datetime.utcnow()
     if period == 'week':
         start_date = end_date - timedelta(days=7)
+        date_format = '%Y-%m-%d'
+        date_extract = func.date(QuizAttempt.completed_at)
     elif period == 'month':
         start_date = end_date - timedelta(days=30)
+        date_format = '%Y-%m-%d'
+        date_extract = func.date(QuizAttempt.completed_at)
     else:  # year
         start_date = end_date - timedelta(days=365)
+        date_format = '%Y-%m'
+        date_extract = func.date_trunc('month', QuizAttempt.completed_at)
     
-    # Build query with proper filters and joins
-    query = QuizAttempt.query\
+    # Build base query with proper joins
+    base_query = QuizAttempt.query\
         .join(Quiz)\
+        .join(Quiz.curriculum)\
         .filter(QuizAttempt.completed_at.between(start_date, end_date))
-        
+    
     if current_user.is_teacher:
         if student_id:
-            query = query.filter(
-                QuizAttempt.student_id == student_id,
-                QuizAttempt.student_id.isnot(None)
-            )
+            # Verify student belongs to teacher
+            student = Student.query.filter_by(id=student_id, teacher_id=current_user.id).first_or_404()
+            base_query = base_query.filter(QuizAttempt.student_id == student_id)
         else:
-            query = query.join(Student).filter(
-                Student.teacher_id == current_user.id,
-                QuizAttempt.student_id.isnot(None)
-            )
+            base_query = base_query\
+                .join(Student)\
+                .filter(Student.teacher_id == current_user.id)
     else:
-        query = query.filter_by(user_id=current_user.id)
+        student = Student.query.filter_by(email=current_user.email).first()
+        base_query = base_query.filter(
+            QuizAttempt.user_id == current_user.id,
+            QuizAttempt.student_id == student.id if student else None
+        )
     
-    attempts = query.order_by(QuizAttempt.completed_at).all()
+    # Get attempts grouped by date
+    attempts_by_date = base_query\
+        .with_entities(
+            date_extract.label('date'),
+            func.avg(QuizAttempt.score).label('avg_score'),
+            func.count(QuizAttempt.id).label('attempt_count')
+        )\
+        .group_by('date')\
+        .order_by('date')\
+        .all()
     
-    # Format data for charts with curriculum information
+    # Format data for charts
     trend_data = [
         {
-            'date': attempt.completed_at.strftime('%Y-%m-%d'),
-            'score': attempt.score,
-            'quiz': attempt.quiz.title,
-            'curriculum': attempt.quiz.curriculum.title,
-            'student': attempt.student_profile.name if attempt.student_profile else current_user.username
+            'date': date.strftime(date_format) if period != 'year' else date.strftime('%Y-%m'),
+            'score': float(avg_score),
+            'attempts': attempt_count
         }
-        for attempt in attempts
+        for date, avg_score, attempt_count in attempts_by_date
     ]
     
     return jsonify({period: trend_data})

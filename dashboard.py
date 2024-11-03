@@ -11,11 +11,13 @@ def index():
     curricula = Curriculum.query.all()
     
     # Get quiz scores for the progress chart with proper filtering and joins
-    base_query = QuizAttempt.query.join(Quiz)
+    base_query = QuizAttempt.query\
+        .join(Quiz)\
+        .join(Quiz.curriculum)
     
     if current_user.is_teacher:
         attempts = base_query\
-            .join(Student)\
+            .join(Student, QuizAttempt.student_id == Student.id)\
             .filter(
                 Student.teacher_id == current_user.id,
                 QuizAttempt.student_id.isnot(None)
@@ -23,8 +25,12 @@ def index():
             .order_by(QuizAttempt.completed_at)\
             .all()
     else:
+        student = Student.query.filter_by(email=current_user.email).first()
         attempts = base_query\
-            .filter_by(user_id=current_user.id)\
+            .filter(
+                QuizAttempt.user_id == current_user.id,
+                QuizAttempt.student_id == student.id if student else None
+            )\
             .order_by(QuizAttempt.completed_at)\
             .all()
     
@@ -40,7 +46,7 @@ def index():
     if current_user.is_teacher:
         # Get recent student attempts with proper joins and filters
         recent_student_attempts = QuizAttempt.query\
-            .join(Student)\
+            .join(Student, QuizAttempt.student_id == Student.id)\
             .join(Quiz)\
             .filter(
                 Student.teacher_id == current_user.id,
@@ -61,15 +67,17 @@ def index():
                 QuizAssignment.student_id.isnot(None)
             )\
             .all()
-            
+        
         active_quizzes = len([a for a in quiz_assignments if not a.completed])
         completed_quizzes = len([a for a in quiz_assignments if a.completed])
     
-    return render_template('dashboard/index.html',
-                         curricula=curricula,
-                         dates=dates,
-                         scores=scores,
-                         recent_student_attempts=recent_student_attempts,
-                         total_students=total_students,
-                         active_quizzes=active_quizzes,
-                         completed_quizzes=completed_quizzes)
+    return render_template(
+        'dashboard/index.html',
+        curricula=curricula,
+        dates=dates,
+        scores=scores,
+        recent_student_attempts=recent_student_attempts,
+        total_students=total_students,
+        active_quizzes=active_quizzes,
+        completed_quizzes=completed_quizzes
+    )

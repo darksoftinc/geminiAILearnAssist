@@ -12,7 +12,7 @@ class User(UserMixin, db.Model):
     
     # Relationships
     curricula = db.relationship('Curriculum', backref='author', lazy=True)
-    quiz_attempts = db.relationship('QuizAttempt', backref='student', lazy=True)
+    quiz_attempts = db.relationship('QuizAttempt', backref='user', lazy=True)
     students = db.relationship('Student', backref='teacher', lazy=True)
 
 class Student(db.Model):
@@ -23,9 +23,11 @@ class Student(db.Model):
     teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # Relationships
-    quiz_attempts = db.relationship('QuizAttempt', backref='student_profile', lazy=True)
-    quiz_assignments = db.relationship('QuizAssignment', backref='student', lazy=True)
+    # Relationships with cascade delete
+    quiz_attempts = db.relationship('QuizAttempt', backref='student_profile', lazy=True, 
+                                  cascade='all, delete-orphan')
+    quiz_assignments = db.relationship('QuizAssignment', backref='student', lazy=True,
+                                     cascade='all, delete-orphan')
 
 class Curriculum(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -36,7 +38,7 @@ class Curriculum(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    quizzes = db.relationship('Quiz', backref='curriculum', lazy=True)
+    quizzes = db.relationship('Quiz', backref='curriculum', lazy=True, cascade='all, delete-orphan')
 
 class Quiz(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -44,10 +46,10 @@ class Quiz(db.Model):
     curriculum_id = db.Column(db.Integer, db.ForeignKey('curriculum.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # Relationships
-    questions = db.relationship('Question', backref='quiz', lazy=True)
-    attempts = db.relationship('QuizAttempt', backref='quiz', lazy=True)
-    assignments = db.relationship('QuizAssignment', backref='quiz', lazy=True)
+    # Relationships with cascade delete
+    questions = db.relationship('Question', backref='quiz', lazy=True, cascade='all, delete-orphan')
+    attempts = db.relationship('QuizAttempt', backref='quiz', lazy=True, cascade='all, delete-orphan')
+    assignments = db.relationship('QuizAssignment', backref='quiz', lazy=True, cascade='all, delete-orphan')
 
 class Question(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -63,6 +65,10 @@ class QuizAttempt(db.Model):
     student_id = db.Column(db.Integer, db.ForeignKey('student.id'), nullable=True)
     score = db.Column(db.Float)
     completed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    __table_args__ = (
+        db.Index('idx_student_completed', student_id, completed_at),  # Index for faster student performance queries
+    )
 
 class QuizAssignment(db.Model):
     id = db.Column(db.Integer, primary_key=True)

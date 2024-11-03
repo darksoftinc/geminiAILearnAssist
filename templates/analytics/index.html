@@ -23,9 +23,6 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary">Filtrele</button>
-                </div>
             </form>
         </div>
     </div>
@@ -57,19 +54,17 @@
                 </div>
             </div>
         </div>
-        {% if current_user.is_teacher and class_performance %}
         <div class="col-md-3">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Haftalık Tamamlama</h5>
-                    <h2 class="card-text">{{ "%.1f"|format(class_performance.recent_completion_rate) }}%</h2>
+                    <h5 class="card-title">En Düşük Puan</h5>
+                    <h2 class="card-text">{{ "%.1f"|format(lowest_score) }}%</h2>
                 </div>
             </div>
         </div>
-        {% endif %}
     </div>
 
-    <!-- Performance Trends -->
+    <!-- Performance Charts -->
     <div class="row mb-4">
         <div class="col-12">
             <div class="card">
@@ -80,7 +75,9 @@
                         <button type="button" class="btn btn-outline-primary" data-period="month">Ay</button>
                         <button type="button" class="btn btn-outline-primary" data-period="year">Yıl</button>
                     </div>
-                    <canvas id="trendsChart"></canvas>
+                    <div style="height: 400px;">
+                        <canvas id="trendsChart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -101,7 +98,8 @@
                                     <th>Ortalama Puan</th>
                                     <th>Son Quiz Puanı</th>
                                     <th>Toplam Quiz</th>
-                                    <th>İlerleme</th>
+                                    <th>Haftalık İlerleme</th>
+                                    <th>Gelişim</th>
                                     <th>Detaylar</th>
                                 </tr>
                             </thead>
@@ -113,6 +111,7 @@
                                     <td>{{ "%.1f"|format(performance.average_score) }}%</td>
                                     <td>{{ "%.1f"|format(performance.recent_score) }}%</td>
                                     <td>{{ performance.total_attempts }}</td>
+                                    <td>{{ "%.1f"|format(performance.weekly_progress) }}%</td>
                                     <td>
                                         {% if performance.improvement > 0 %}
                                         <span class="text-success">+{{ "%.1f"|format(performance.improvement) }}%</span>
@@ -138,150 +137,27 @@
 
     <!-- Curriculum Performance -->
     <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Müfredat Bazlı Performans</h5>
-                    <canvas id="curriculumChart"></canvas>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Son Quiz Sonuçları</h5>
-                    <div class="list-group">
-                        {% for result in recent_trend %}
-                        <div class="list-group-item">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1">{{ result.quiz }}</h6>
-                                <small>{{ result.date }}</small>
-                            </div>
-                            <p class="mb-1">
-                                {% if current_user.is_teacher %}
-                                <strong>Öğrenci:</strong> {{ result.student }} |
-                                {% endif %}
-                                <strong>Puan:</strong> {{ "%.1f"|format(result.score) }}%
-                            </p>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    {% if current_user.is_teacher and class_performance %}
-    <!-- Class Performance Overview -->
-    <div class="row mb-4">
         <div class="col-12">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Sınıf Performans Özeti</h5>
-                    <div class="row">
-                        <div class="col-md-3">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h6 class="card-subtitle mb-2 text-muted">Toplam Öğrenci</h6>
-                                    <p class="card-text h3">{{ class_performance.total_students }}</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h6 class="card-subtitle mb-2 text-muted">Toplam Quiz Denemesi</h6>
-                                    <p class="card-text h3">{{ class_performance.total_attempts }}</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h6 class="card-subtitle mb-2 text-muted">Sınıf Ortalaması</h6>
-                                    <p class="card-text h3">{{ "%.1f"|format(class_performance.class_average) }}%</p>
-                                </div>
-                            </div>
-                        </div>
+                    <h5 class="card-title">Müfredat Bazlı Performans</h5>
+                    <div style="height: 400px;">
+                        <canvas id="curriculumChart"></canvas>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const trendsCtx = document.getElementById('trendsChart').getContext('2d');
-    const trendsChart = new Chart(trendsCtx, {
-        type: 'line',
-        data: {
-            labels: {{ recent_trend|map(attribute='date')|list|tojson }},
-            datasets: [{
-                label: 'Quiz Puanları',
-                data: {{ recent_trend|map(attribute='score')|list|tojson }},
-                borderColor: 'rgb(75, 192, 192)',
-                tension: 0.1
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 100
-                }
-            }
-        }
-    });
-
-    // Curriculum Performance Chart
-    const curriculumCtx = document.getElementById('curriculumChart').getContext('2d');
-    const curriculumChart = new Chart(curriculumCtx, {
-        type: 'bar',
-        data: {
-            labels: {{ curriculum_performance.keys()|list|tojson }},
-            datasets: [{
-                label: 'Ortalama Puan',
-                data: {{ curriculum_performance.values()|map(attribute='average')|list|tojson }},
-                backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                borderColor: 'rgb(75, 192, 192)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 100
-                }
-            }
-        }
-    });
-
-    // Handle period selection for trends
-    document.querySelectorAll('[data-period]').forEach(button => {
-        button.addEventListener('click', function() {
-            document.querySelectorAll('[data-period]').forEach(btn => btn.classList.remove('active'));
-            this.classList.add('active');
-            
-            const studentId = document.getElementById('student_id')?.value || '';
-            fetch(`/analytics/performance_trends?period=${this.dataset.period}&student_id=${studentId}`)
-                .then(response => response.json())
-                .then(data => {
-                    const period = this.dataset.period;
-                    const periodData = data[period];
-                    
-                    trendsChart.data.labels = periodData.map(item => item.date);
-                    trendsChart.data.datasets[0].data = periodData.map(item => item.score);
-                    trendsChart.update();
-                });
-        });
-    });
-});
+    // Pass chart data to JavaScript
+    window.chartData = {
+        recentTrend: {{ recent_trend|tojson }},
+        curriculumPerformance: {{ curriculum_performance|tojson }}
+    };
 </script>
+<script src="{{ url_for('static', filename='js/analytics.js') }}"></script>
 {% endblock %}
