@@ -10,10 +10,10 @@ class User(UserMixin, db.Model):
     is_teacher = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # Relationships
-    curricula = db.relationship('Curriculum', backref='author', lazy=True)
-    quiz_attempts = db.relationship('QuizAttempt', backref='user', lazy=True)
-    students = db.relationship('Student', backref='teacher', lazy=True)
+    # Relationships with cascade delete
+    curricula = db.relationship('Curriculum', backref='author', lazy=True, cascade='all, delete-orphan')
+    quiz_attempts = db.relationship('QuizAttempt', backref='user', lazy=True, cascade='all, delete-orphan')
+    students = db.relationship('Student', backref='teacher', lazy=True, cascade='all, delete-orphan')
 
 class Student(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -24,10 +24,14 @@ class Student(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships with cascade delete
-    quiz_attempts = db.relationship('QuizAttempt', backref='student_profile', lazy=True, 
+    quiz_attempts = db.relationship('QuizAttempt', backref='student', lazy=True, 
                                   cascade='all, delete-orphan')
     quiz_assignments = db.relationship('QuizAssignment', backref='student', lazy=True,
                                      cascade='all, delete-orphan')
+
+    __table_args__ = (
+        db.Index('idx_student_teacher', teacher_id),  # Index for faster teacher lookups
+    )
 
 class Curriculum(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -37,7 +41,7 @@ class Curriculum(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationships
+    # Relationships with cascade delete
     quizzes = db.relationship('Quiz', backref='curriculum', lazy=True, cascade='all, delete-orphan')
 
 class Quiz(db.Model):
@@ -68,6 +72,8 @@ class QuizAttempt(db.Model):
     
     __table_args__ = (
         db.Index('idx_student_completed', student_id, completed_at),  # Index for faster student performance queries
+        db.Index('idx_quiz_student', quiz_id, student_id),  # Index for quiz-student lookups
+        db.Index('idx_user_completed', user_id, completed_at),  # Index for user attempt queries
     )
 
 class QuizAssignment(db.Model):
@@ -76,3 +82,7 @@ class QuizAssignment(db.Model):
     student_id = db.Column(db.Integer, db.ForeignKey('student.id'), nullable=False)
     assigned_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed = db.Column(db.Boolean, default=False)
+    
+    __table_args__ = (
+        db.Index('idx_assignment_student', student_id, completed),  # Index for faster assignment lookups
+    )

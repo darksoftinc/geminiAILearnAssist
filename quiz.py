@@ -94,6 +94,8 @@ def create():
 @login_required
 def take(id):
     quiz = Quiz.query.get_or_404(id)
+    
+    # Get student profile for the current user
     student = None if current_user.is_teacher else Student.query.filter_by(email=current_user.email).first()
     
     # Check if the student is assigned to this quiz
@@ -102,11 +104,7 @@ def take(id):
             quiz_id=quiz.id,
             student_id=student.id,
             completed=False
-        ).first()
-        
-        if not assignment:
-            flash('Bu quizi almaya yetkiniz yok veya daha önce tamamladınız.', 'error')
-            return redirect(url_for('dashboard.index'))
+        ).first_or_404()
     
     if request.method == 'POST':
         score = 0
@@ -119,27 +117,28 @@ def take(id):
         
         final_score = (score / total_questions) * 100
         
-        attempt = QuizAttempt(
-            user_id=current_user.id,
-            quiz_id=quiz.id,
-            student_id=student.id if student else None,
-            score=final_score
-        )
-        
         try:
+            # Create quiz attempt with proper student relationship
+            attempt = QuizAttempt(
+                user_id=current_user.id,
+                quiz_id=quiz.id,
+                student_id=student.id if student else None,
+                score=final_score
+            )
             db.session.add(attempt)
             
-            # Mark the assignment as completed
-            if student:
+            # Mark the assignment as completed if student exists
+            if student and assignment:
                 assignment.completed = True
-                
+            
             db.session.commit()
             
-            # Emit real-time notification
+            # Emit real-time notification with proper student info
             emit_quiz_completion(attempt)
             
             flash(f'Quiz tamamlandı! Puanınız: {final_score:.1f}%', 'success')
             return redirect(url_for('quiz.results', attempt_id=attempt.id))
+            
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Quiz attempt save error: {str(e)}")
@@ -152,8 +151,17 @@ def take(id):
 @login_required
 def results(attempt_id):
     attempt = QuizAttempt.query.get_or_404(attempt_id)
+    
+    # Check access permissions
     if attempt.user_id != current_user.id and not current_user.is_teacher:
         flash('Bu sonucu görüntüleme yetkiniz yok.', 'error')
         return redirect(url_for('dashboard.index'))
+    
+    # For teachers, verify they can access this student's results
+    if current_user.is_teacher and attempt.student_id:
+        student = Student.query.get_or_404(attempt.student_id)
+        if student.teacher_id != current_user.id:
+            flash('Bu öğrencinin sonuçlarını görüntüleme yetkiniz yok.', 'error')
+            return redirect(url_for('dashboard.index'))
     
     return render_template('quiz/results.html', attempt=attempt)
