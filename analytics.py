@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, jsonify, request, flash, redirect, url_for
 from flask_login import login_required, current_user
-from models import User, QuizAttempt, Quiz, Curriculum, Student
+from models import User, QuizAttempt, Quiz, Curriculum, Student, db
 from sqlalchemy import func, desc, and_, extract
 from datetime import datetime, timedelta
 
@@ -11,27 +11,29 @@ analytics_bp = Blueprint('analytics', __name__)
 def index():
     selected_student_id = request.args.get('student_id', type=int)
     
-    # Base query with all necessary joins
+    # Base query with proper joins for quiz attempts
     base_query = QuizAttempt.query\
         .join(Quiz)\
-        .join(Quiz.curriculum)
+        .join(Quiz.curriculum)\
+        .join(Student, QuizAttempt.student_id == Student.id)
     
     if current_user.is_teacher:
         if selected_student_id:
             # Get attempts for a specific student with validation
-            student = Student.query.filter_by(id=selected_student_id, teacher_id=current_user.id).first_or_404()
-            attempts = base_query\
-                .join(Student)\
-                .filter(
-                    QuizAttempt.student_id == student.id,
-                    Student.teacher_id == current_user.id
-                ).order_by(QuizAttempt.completed_at.desc()).all()
+            student = Student.query.filter_by(
+                id=selected_student_id,
+                teacher_id=current_user.id
+            ).first_or_404()
+            
+            attempts = base_query.filter(
+                QuizAttempt.student_id == student.id,
+                Student.teacher_id == current_user.id
+            ).order_by(QuizAttempt.completed_at.desc()).all()
         else:
             # Get all attempts from teacher's students
-            attempts = base_query\
-                .join(Student)\
-                .filter(Student.teacher_id == current_user.id)\
-                .order_by(QuizAttempt.completed_at.desc()).all()
+            attempts = base_query.filter(
+                Student.teacher_id == current_user.id
+            ).order_by(QuizAttempt.completed_at.desc()).all()
     else:
         # Student viewing their own attempts
         student = Student.query.filter_by(email=current_user.email).first()
@@ -43,57 +45,69 @@ def index():
             QuizAttempt.student_id == student.id
         ).order_by(QuizAttempt.completed_at.desc()).all()
     
-    # Calculate overall statistics
+    # Calculate overall statistics with proper error handling
     total_quizzes = len(attempts)
     if total_quizzes > 0:
-        average_score = sum(attempt.score for attempt in attempts) / total_quizzes
-        highest_score = max(attempt.score for attempt in attempts)
-        lowest_score = min(attempt.score for attempt in attempts)
+        scores = [attempt.score for attempt in attempts if attempt.score is not None]
+        if scores:
+            average_score = sum(scores) / len(scores)
+            highest_score = max(scores)
+            lowest_score = min(scores)
+        else:
+            average_score = highest_score = lowest_score = 0.0
         
-        # Get recent trend with proper student information
-        recent_trend = [
-            {
-                'date': attempt.completed_at.strftime('%Y-%m-%d'),
-                'score': attempt.score,
-                'quiz': attempt.quiz.title,
-                'student': attempt.student_profile.name if attempt.student_profile else current_user.username,
-                'curriculum': attempt.quiz.curriculum.title
-            }
-            for attempt in sorted(attempts, key=lambda x: x.completed_at, reverse=True)[:10]
-        ]
+        # Get recent trend with proper student information and error handling
+        recent_trend = []
+        for attempt in sorted(attempts, key=lambda x: x.completed_at, reverse=True)[:10]:
+            try:
+                trend_data = {
+                    'date': attempt.completed_at.strftime('%Y-%m-%d'),
+                    'score': attempt.score,
+                    'quiz': attempt.quiz.title,
+                    'student': attempt.student_profile.name if attempt.student_profile else 'Unknown',
+                    'curriculum': attempt.quiz.curriculum.title
+                }
+                recent_trend.append(trend_data)
+            except AttributeError:
+                continue
     else:
-        average_score = highest_score = lowest_score = 0
+        average_score = highest_score = lowest_score = 0.0
         recent_trend = []
     
-    # Calculate curriculum-wise performance
+    # Calculate curriculum-wise performance with error handling
     curriculum_performance = {}
     for attempt in attempts:
-        curriculum = attempt.quiz.curriculum
-        if curriculum.title not in curriculum_performance:
-            curriculum_performance[curriculum.title] = {
-                'attempts': 0,
-                'total_score': 0,
-                'average': 0,
-                'student_count': set(),
-                'recent_scores': []
-            }
-        
-        curr_perf = curriculum_performance[curriculum.title]
-        curr_perf['attempts'] += 1
-        curr_perf['total_score'] += attempt.score
-        if attempt.student_id:
-            curr_perf['student_count'].add(attempt.student_id)
-        curr_perf['recent_scores'].append({
-            'date': attempt.completed_at.strftime('%Y-%m-%d'),
-            'score': attempt.score
-        })
+        try:
+            curriculum = attempt.quiz.curriculum
+            if curriculum.title not in curriculum_performance:
+                curriculum_performance[curriculum.title] = {
+                    'attempts': 0,
+                    'total_score': 0,
+                    'average': 0,
+                    'student_count': set(),
+                    'recent_scores': []
+                }
+            
+            if attempt.score is not None:
+                curr_perf = curriculum_performance[curriculum.title]
+                curr_perf['attempts'] += 1
+                curr_perf['total_score'] += attempt.score
+                if attempt.student_id:
+                    curr_perf['student_count'].add(attempt.student_id)
+                curr_perf['recent_scores'].append({
+                    'date': attempt.completed_at.strftime('%Y-%m-%d'),
+                    'score': attempt.score
+                })
+        except AttributeError:
+            continue
     
     # Calculate averages and prepare final curriculum data
     for curr_title, curr_data in curriculum_performance.items():
-        curr_data['average'] = curr_data['total_score'] / curr_data['attempts']
+        if curr_data['attempts'] > 0:
+            curr_data['average'] = curr_data['total_score'] / curr_data['attempts']
         curr_data['student_count'] = len(curr_data['student_count'])
         curr_data['recent_scores'].sort(key=lambda x: x['date'], reverse=True)
-        curr_data['recent_scores'] = curr_data['recent_scores'][:5]  # Keep only recent 5 scores
+        curr_data['recent_scores'] = curr_data['recent_scores'][:5]
     
     # Get student list and performance data for teachers
     students = []
@@ -112,14 +126,19 @@ def index():
                 .all()
             
             if student_attempts:
-                avg_score = sum(a.score for a in student_attempts) / len(student_attempts)
-                recent_score = student_attempts[0].score
-                improvement = recent_score - student_attempts[-1].score if len(student_attempts) > 1 else 0
-                
-                # Calculate weekly progress
-                week_ago = datetime.utcnow() - timedelta(days=7)
-                recent_attempts = [a for a in student_attempts if a.completed_at >= week_ago]
-                weekly_progress = sum(a.score for a in recent_attempts) / len(recent_attempts) if recent_attempts else 0
+                valid_scores = [a.score for a in student_attempts if a.score is not None]
+                if valid_scores:
+                    avg_score = sum(valid_scores) / len(valid_scores)
+                    recent_score = student_attempts[0].score
+                    improvement = recent_score - student_attempts[-1].score if len(valid_scores) > 1 else 0
+                    
+                    # Calculate weekly progress
+                    week_ago = datetime.utcnow() - timedelta(days=7)
+                    recent_attempts = [a.score for a in student_attempts 
+                                    if a.completed_at >= week_ago and a.score is not None]
+                    weekly_progress = sum(recent_attempts) / len(recent_attempts) if recent_attempts else 0
+                else:
+                    avg_score = recent_score = improvement = weekly_progress = 0
             else:
                 avg_score = recent_score = improvement = weekly_progress = 0
             
@@ -207,22 +226,19 @@ def performance_trends():
     base_query = QuizAttempt.query\
         .join(Quiz)\
         .join(Quiz.curriculum)\
+        .join(Student, QuizAttempt.student_id == Student.id)\
         .filter(QuizAttempt.completed_at.between(start_date, end_date))
     
     if current_user.is_teacher:
         if student_id:
             # Verify student belongs to teacher
             student = Student.query.filter_by(id=student_id, teacher_id=current_user.id).first_or_404()
-            base_query = base_query\
-                .join(Student)\
-                .filter(
-                    QuizAttempt.student_id == student.id,
-                    Student.teacher_id == current_user.id
-                )
+            base_query = base_query.filter(
+                QuizAttempt.student_id == student.id,
+                Student.teacher_id == current_user.id
+            )
         else:
-            base_query = base_query\
-                .join(Student)\
-                .filter(Student.teacher_id == current_user.id)
+            base_query = base_query.filter(Student.teacher_id == current_user.id)
     else:
         student = Student.query.filter_by(email=current_user.email).first()
         if student:
@@ -241,14 +257,16 @@ def performance_trends():
         .order_by('date')\
         .all()
     
-    # Format data for charts
-    trend_data = [
-        {
-            'date': date.strftime(date_format) if period != 'year' else date.strftime('%Y-%m'),
-            'score': float(avg_score),
-            'attempts': attempt_count
-        }
-        for date, avg_score, attempt_count in attempts_by_date
-    ]
+    # Format data for charts with error handling
+    trend_data = []
+    for date, avg_score, attempt_count in attempts_by_date:
+        try:
+            trend_data.append({
+                'date': date.strftime(date_format) if period != 'year' else date.strftime('%Y-%m'),
+                'score': float(avg_score or 0),
+                'attempts': attempt_count
+            })
+        except (AttributeError, ValueError):
+            continue
     
     return jsonify({period: trend_data})

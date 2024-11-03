@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const curriculumChartEl = document.getElementById('curriculumChart');
     const periodButtons = document.querySelectorAll('[data-period]');
     const studentSelect = document.getElementById('student_id');
+    const chartData = window.chartData || {};
     
     // Initialize trends chart if element exists
     if (trendsChartEl) {
@@ -11,10 +12,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const trendsChart = new Chart(trendsCtx, {
             type: 'line',
             data: {
-                labels: window.chartData?.recentTrend?.map(item => item.date) || [],
+                labels: chartData.recentTrend?.map(item => item.date) || [],
                 datasets: [{
                     label: 'Quiz Puanları',
-                    data: window.chartData?.recentTrend?.map(item => item.score) || [],
+                    data: chartData.recentTrend?.map(item => item.score) || [],
                     borderColor: 'rgb(75, 192, 192)',
                     tension: 0.1,
                     fill: false
@@ -58,14 +59,18 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         // Handle period selection for trends if buttons exist
-        if (periodButtons.length > 0) {
+        if (periodButtons && periodButtons.length > 0) {
             periodButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    periodButtons.forEach(btn => btn.classList.remove('active'));
-                    this.classList.add('active');
+                button?.addEventListener('click', function() {
+                    if (!this) return;
+                    
+                    periodButtons.forEach(btn => btn?.classList?.remove('active'));
+                    this.classList?.add('active');
                     
                     const studentId = studentSelect?.value || '';
-                    const period = this.dataset.period;
+                    const period = this.dataset?.period;
+                    
+                    if (!period) return;
                     
                     fetch(`/analytics/performance_trends?period=${period}&student_id=${studentId}`)
                         .then(response => response.json())
@@ -87,13 +92,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize curriculum chart if element exists
     if (curriculumChartEl) {
         const curriculumCtx = curriculumChartEl.getContext('2d');
+        const curriculumData = chartData.curriculumPerformance || {};
+        
         const curriculumChart = new Chart(curriculumCtx, {
             type: 'bar',
             data: {
-                labels: Object.keys(window.chartData?.curriculumPerformance || {}),
+                labels: Object.keys(curriculumData),
                 datasets: [{
                     label: 'Ortalama Puan',
-                    data: Object.values(window.chartData?.curriculumPerformance || {}).map(item => item.average),
+                    data: Object.values(curriculumData).map(item => item?.average || 0),
                     backgroundColor: 'rgba(75, 192, 192, 0.2)',
                     borderColor: 'rgb(75, 192, 192)',
                     borderWidth: 1
@@ -120,11 +127,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                const curriculum = window.chartData?.curriculumPerformance[context.label];
+                                const curriculum = curriculumData[context.label] || {};
                                 return [
                                     `Ortalama: ${context.parsed.y.toFixed(1)}%`,
-                                    `Toplam Deneme: ${curriculum?.attempts || 0}`,
-                                    `Öğrenci Sayısı: ${curriculum?.student_count || 0}`
+                                    `Toplam Deneme: ${curriculum.attempts || 0}`,
+                                    `Öğrenci Sayısı: ${curriculum.student_count || 0}`
                                 ];
                             }
                         }
@@ -136,8 +143,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Handle student filter changes if select exists
     if (studentSelect) {
-        studentSelect.addEventListener('change', function() {
-            this.form?.submit();
-        });
+        const form = studentSelect.closest('form');
+        if (form) {
+            studentSelect.addEventListener('change', () => form.submit());
+        }
     }
 });
