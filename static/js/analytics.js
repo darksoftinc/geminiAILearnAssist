@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const periodButtons = document.querySelectorAll('[data-period]');
     const studentSelect = document.getElementById('student_id');
     
-    // Initialize charts if elements exist
+    // Initialize trends chart if element exists
     if (trendsChartEl) {
         const trendsCtx = trendsChartEl.getContext('2d');
         const trendsChart = new Chart(trendsCtx, {
@@ -137,7 +137,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle student filter changes if select exists
     if (studentSelect) {
         studentSelect.addEventListener('change', function() {
-            this.form.submit();
+            this.form?.submit();
         });
     }
 });
