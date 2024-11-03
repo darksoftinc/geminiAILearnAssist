@@ -1,9 +1,9 @@
-# Use this Flask blueprint for Google authentication. Do not use flask-dance.
 import json
 import os
+import secrets
 import requests
 from app import db
-from flask import Blueprint, redirect, request, url_for, flash, current_app
+from flask import Blueprint, redirect, request, url_for, flash, current_app, session
 from flask_login import login_required, login_user, logout_user
 from models import User
 from oauthlib.oauth2 import WebApplicationClient
@@ -19,29 +19,47 @@ google_auth = Blueprint("google_auth", __name__)
 @google_auth.route("/google_login")
 def login():
     try:
+        # Get the current domain from environment or request
+        if request.headers.get('X-Forwarded-Proto') == 'https':
+            domain = request.headers.get('X-Forwarded-Host', '')
+        else:
+            domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
+            
+        redirect_uri = f"https://{domain}/google_login/callback"
+        
+        # Add state parameter for security
+        state = secrets.token_hex(16)
+        session['oauth_state'] = state
+        
         google_provider_cfg = requests.get(GOOGLE_DISCOVERY_URL).json()
         authorization_endpoint = google_provider_cfg["authorization_endpoint"]
-        
-        # Get the current domain from environment
-        domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
-        redirect_uri = f"https://{domain}/google_login/callback"
         
         request_uri = client.prepare_request_uri(
             authorization_endpoint,
             redirect_uri=redirect_uri,
             scope=["openid", "email", "profile"],
+            state=state
         )
         
-        current_app.logger.info(f"Redirecting to Google OAuth: {request_uri}")
+        # Log the redirect URI for debugging
+        current_app.logger.info(f"OAuth redirect URI: {redirect_uri}")
         return redirect(request_uri)
     except Exception as e:
-        current_app.logger.error(f"Google OAuth login error: {str(e)}")
-        flash("Failed to initialize Google login", "error")
+        current_app.logger.error(f"Google OAuth error: {str(e)}")
+        flash("Google login initialization failed", "error")
         return redirect(url_for('auth.login'))
 
 @google_auth.route("/google_login/callback")
 def callback():
     try:
+        # Verify state parameter
+        state = request.args.get('state')
+        stored_state = session.pop('oauth_state', None)
+        
+        if not state or state != stored_state:
+            flash("Invalid OAuth state", "error")
+            return redirect(url_for('auth.login'))
+
         code = request.args.get("code")
         if not code:
             flash("Google authentication failed - no authorization code received", "error")
@@ -50,7 +68,10 @@ def callback():
         google_provider_cfg = requests.get(GOOGLE_DISCOVERY_URL).json()
         token_endpoint = google_provider_cfg["token_endpoint"]
         
-        domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
+        if request.headers.get('X-Forwarded-Proto') == 'https':
+            domain = request.headers.get('X-Forwarded-Host', '')
+        else:
+            domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
         redirect_url = f"https://{domain}/google_login/callback"
         
         token_url, headers, body = client.prepare_token_request(
