@@ -7,11 +7,11 @@ from google.api_core import retry
 from flask import current_app
 
 class AIServiceError(Exception):
-    """Custom exception for AI service errors"""
+    """AI servisi için özel hata sınıfı"""
     pass
 
 def generate_curriculum_content(topic: str, level: str = "intermediate") -> str:
-    """Generate curriculum content using Gemini AI with error handling and retries"""
+    """Gemini AI kullanarak müfredat içeriği oluştur ve hata yönetimini sağla"""
     try:
         prompt = f"""Lütfen aşağıdaki {level} seviyesinde {topic} konusu için detaylı bir müfredat oluşturun.
         Şunları içermelidir:
@@ -37,35 +37,35 @@ def generate_curriculum_content(topic: str, level: str = "intermediate") -> str:
         raise AIServiceError(f"Müfredat oluşturulamadı: {str(e)}")
 
 def clean_json_response(response_text: str) -> str:
-    """Clean and extract JSON from the AI response"""
-    # Log the raw response for debugging
-    current_app.logger.debug(f"Raw AI Response:\n{response_text}")
+    """AI yanıtından JSON temizle ve ayıkla"""
+    # Hata ayıklama için ham yanıtı logla
+    current_app.logger.debug(f"Ham AI Yanıtı:\n{response_text}")
     
-    # Remove markdown code blocks
+    # Markdown kod bloklarını kaldır
     text = re.sub(r'```(?:json)?\n?(.*?)\n```', r'\1', response_text, flags=re.DOTALL)
     
-    # Try to find JSON structure
+    # JSON yapısını bul
     match = re.search(r'({[\s\S]*})', text)
     if match:
         text = match.group(1)
     
-    # Remove any non-JSON text before or after
+    # JSON olmayan metinleri baştan ve sondan temizle
     text = text.strip()
     
-    current_app.logger.debug(f"Cleaned JSON Response:\n{text}")
+    current_app.logger.debug(f"Temizlenmiş JSON Yanıtı:\n{text}")
     return text
 
 def generate_quiz_questions(curriculum_content: str, num_questions: int = 5) -> list:
-    """Generate quiz questions with enhanced error handling and JSON validation"""
+    """Gelişmiş hata yönetimi ve JSON doğrulama ile quiz soruları oluştur"""
     try:
         prompt = f"""Lütfen aşağıdaki müfredata göre {num_questions} adet soru oluşturun:
 {curriculum_content}
 
 ÖNEMLİ: Yanıtı SADECE aşağıdaki JSON formatında verin, başka açıklama veya metin EKLEMEDEN:
 
-{{
+{
     "questions": [
-        {{
+        {
             "question": "Soru metni buraya gelecek?",
             "options": [
                 "A) Birinci seçenek",
@@ -74,9 +74,9 @@ def generate_quiz_questions(curriculum_content: str, num_questions: int = 5) -> 
                 "D) Dördüncü seçenek"
             ],
             "correct_answer": "A) Birinci seçenek"
-        }}
+        }
     ]
-}}
+}
 
 KURALLAR:
 1. Yanıt SADECE JSON olmalıdır, başka metin veya açıklama OLMAMALIDIR
@@ -94,11 +94,11 @@ KURALLAR:
                     if not response or not response.text:
                         raise AIServiceError("Gemini AI'dan boş yanıt alındı")
                     
-                    # Clean and parse JSON
+                    # JSON temizle ve ayrıştır
                     json_text = clean_json_response(response.text)
                     data = json.loads(json_text)
                     
-                    # Validate JSON structure
+                    # JSON yapısını doğrula
                     if not isinstance(data, dict) or "questions" not in data:
                         raise AIServiceError("Yanıt beklenen JSON yapısında değil")
                     
@@ -106,7 +106,7 @@ KURALLAR:
                     if not isinstance(questions, list) or len(questions) != num_questions:
                         raise AIServiceError(f"Beklenen soru sayısı ({num_questions}) ile eşleşmiyor")
                     
-                    # Validate each question
+                    # Her soruyu doğrula
                     for i, q in enumerate(questions):
                         if not all(key in q for key in ["question", "options", "correct_answer"]):
                             raise AIServiceError(f"{i+1}. soru gerekli tüm alanları içermiyor")

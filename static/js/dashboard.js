@@ -1,8 +1,8 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // Get elements with null checks
+    // Null kontrolü ile elementleri al
     const progressChartEl = document.getElementById('progressChart');
     
-    // Initialize progress chart if element exists
+    // Element varsa ilerleme grafiğini başlat
     if (progressChartEl) {
         const ctx = progressChartEl.getContext('2d');
         new Chart(ctx, {
@@ -28,18 +28,18 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Handle form submissions with null checks
+    // Null kontrolü ile form gönderimlerini işle
     const quizForm = document.getElementById('quizForm');
     const createCurriculumForm = document.getElementById('createCurriculumForm');
     
-    // Handle quiz form submission
+    // Quiz form gönderimini işle
     if (quizForm) {
         quizForm.addEventListener('submit', function(e) {
             const submitBtn = this.querySelector('button[type="submit"]');
             const spinner = submitBtn?.querySelector('.spinner-border');
             
             if (submitBtn && spinner) {
-                // Show loading state
+                // Yükleme durumunu göster
                 submitBtn.disabled = true;
                 spinner.classList.remove('d-none');
                 submitBtn.textContent = ' Yanıtlar Gönderiliyor...';
@@ -48,23 +48,23 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Handle curriculum form submission
+    // Müfredat form gönderimini işle
     if (createCurriculumForm) {
         createCurriculumForm.addEventListener('submit', function(e) {
             const submitBtn = document.getElementById('submitBtn');
             const spinner = submitBtn?.querySelector('.spinner-border');
             
             if (submitBtn && spinner) {
-                // Show loading state
+                // Yükleme durumunu göster
                 submitBtn.disabled = true;
                 spinner.classList.remove('d-none');
-                submitBtn.textContent = ' Generating Curriculum...';
+                submitBtn.textContent = ' Müfredat Oluşturuluyor...';
                 submitBtn.prepend(spinner);
             }
         });
     }
 
-    // Initialize tooltips if Bootstrap is loaded
+    // Bootstrap yüklü ise ipuçlarını başlat
     if (typeof bootstrap !== 'undefined') {
         const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
         tooltipTriggerList.map(function (tooltipTriggerEl) {

@@ -8,7 +8,7 @@ def init_app(app):
     socketio.init_app(app, async_mode='eventlet', cors_allowed_origins="*")
 
 def emit_quiz_completion(attempt):
-    """Emit a quiz completion notification"""
+    """Quiz tamamlama bildirimini gönder"""
     try:
         notification_data = {
             'type': 'quiz_completion',
@@ -18,12 +18,12 @@ def emit_quiz_completion(attempt):
             'timestamp': attempt.completed_at.strftime('%Y-%m-%d %H:%M:%S')
         }
         
-        # Emit to teachers if it's a student's quiz completion
+        # Öğrenci quiz'i tamamladığında öğretmenlere bildirim gönder
         if not attempt.student.is_teacher:
             socketio.emit('notification', notification_data, room='teachers')
             
-        # Also emit to the student who completed the quiz
+        # Quiz'i tamamlayan öğrenciye de bildirim gönder
         socketio.emit('notification', notification_data, room=f'user_{attempt.student.id}')
         
     except Exception as e:
-        current_app.logger.error(f"Error emitting quiz completion: {str(e)}")
+        current_app.logger.error(f"Quiz tamamlama bildirimi gönderilirken hata: {str(e)}")

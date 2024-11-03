@@ -12,10 +12,10 @@ class Base(DeclarativeBase):
 db = SQLAlchemy(model_class=Base)
 login_manager = LoginManager()
 
-# Create the app
+# Uygulama oluştur
 app = Flask(__name__)
 
-# Configure app
+# Uygulama yapılandırması
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or "a secret key"
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
@@ -23,19 +23,19 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,
 }
 
-# Configure Gemini AI
+# Gemini AI yapılandırması
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 app.config['GENAI_MODEL'] = genai.GenerativeModel('gemini-pro')
 
-# Initialize extensions
+# Eklentileri başlat
 db.init_app(app)
 login_manager.init_app(app)
 login_manager.login_view = 'auth.login'
 
-# Initialize SocketIO
+# SocketIO başlat
 notifications.init_app(app)
 
-# Register blueprints
+# Blueprint'leri kaydet
 with app.app_context():
     from auth import auth_bp
     from curriculum import curriculum_bp
@@ -53,7 +53,7 @@ with app.app_context():
     app.register_blueprint(student_bp)
     app.register_blueprint(google_auth, url_prefix='/')
     
-    # Import models and create tables if they don't exist
+    # Modelleri içe aktar ve tablolar yoksa oluştur
     import models
     db.create_all()
 
