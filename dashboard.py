@@ -10,15 +10,20 @@ dashboard_bp = Blueprint('dashboard', __name__)
 def index():
     curricula = Curriculum.query.all()
     
-    # Get quiz scores for the progress chart with proper filtering
+    # Get quiz scores for the progress chart with proper filtering and joins
+    base_query = QuizAttempt.query.join(Quiz)
+    
     if current_user.is_teacher:
-        attempts = QuizAttempt.query\
+        attempts = base_query\
             .join(Student)\
-            .filter(Student.teacher_id == current_user.id)\
+            .filter(
+                Student.teacher_id == current_user.id,
+                QuizAttempt.student_id.isnot(None)
+            )\
             .order_by(QuizAttempt.completed_at)\
             .all()
     else:
-        attempts = QuizAttempt.query\
+        attempts = base_query\
             .filter_by(user_id=current_user.id)\
             .order_by(QuizAttempt.completed_at)\
             .all()
@@ -33,11 +38,14 @@ def index():
     completed_quizzes = 0
     
     if current_user.is_teacher:
-        # Get recent student attempts with proper joins
+        # Get recent student attempts with proper joins and filters
         recent_student_attempts = QuizAttempt.query\
             .join(Student)\
-            .filter(Student.teacher_id == current_user.id)\
             .join(Quiz)\
+            .filter(
+                Student.teacher_id == current_user.id,
+                QuizAttempt.student_id.isnot(None)
+            )\
             .order_by(desc(QuizAttempt.completed_at))\
             .limit(10)\
             .all()
@@ -48,7 +56,10 @@ def index():
         # Count active and completed quizzes with proper joins
         quiz_assignments = QuizAssignment.query\
             .join(Student)\
-            .filter(Student.teacher_id == current_user.id)\
+            .filter(
+                Student.teacher_id == current_user.id,
+                QuizAssignment.student_id.isnot(None)
+            )\
             .all()
             
         active_quizzes = len([a for a in quiz_assignments if not a.completed])
